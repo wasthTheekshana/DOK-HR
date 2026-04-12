@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { Site } from '../types';
 import { format } from 'date-fns';
-import { MapPin, FileText, Download, Calendar, Clock, Target, TrendingUp, DollarSign, Users, Save, History, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, FileText, Download, Calendar, Clock, Target, TrendingUp, DollarSign, Users, Save, History, ChevronDown, ChevronUp, Moon, Plus, Trash2, Sparkles, Check, Pencil, X } from 'lucide-react';
+import { calculatePoyaDays, type PoyaDate } from '../utils/poyaUtils';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +29,18 @@ const Payroll: React.FC = () => {
     const [histDateFrom, setHistDateFrom] = useState('');
     const [histDateTo, setHistDateTo] = useState('');
     const [histSiteNo, setHistSiteNo] = useState('');
+    const [showPoyaPanel, setShowPoyaPanel] = useState(false);
+    const [poyaDays, setPoyaDays] = useState<any[]>([]);
+    const [newPoyaDate, setNewPoyaDate] = useState('');
+    const [newPoyaDesc, setNewPoyaDesc] = useState('');
+    const [poyaMsg, setPoyaMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [autoYear, setAutoYear] = useState(new Date().getFullYear());
+    const [autoPreview, setAutoPreview] = useState<PoyaDate[]>([]);
+    const [selectedAuto, setSelectedAuto] = useState<Set<string>>(new Set());
+    const [bulkAdding, setBulkAdding] = useState(false);
+    const [editingPoya, setEditingPoya] = useState<any | null>(null);
+    const [editDate, setEditDate] = useState('');
+    const [editDesc, setEditDesc] = useState('');
 
     useEffect(() => {
         const loadSites = async () => {
@@ -99,6 +112,100 @@ const Payroll: React.FC = () => {
     useEffect(() => {
         if (showPayrollHistory) fetchPayrollHistory();
     }, [showPayrollHistory, histDateFrom, histDateTo, histSiteNo]);
+
+    const fetchPoyaDays = async () => {
+        try {
+            const res = await api.get('/poya-days');
+            setPoyaDays(res.data);
+        } catch (err) { console.error(err); }
+    };
+
+    useEffect(() => { if (showPoyaPanel) fetchPoyaDays(); }, [showPoyaPanel]);
+
+    const addPoyaDay = async () => {
+        if (!newPoyaDate) return;
+        try {
+            await api.post('/poya-days', { poya_date: newPoyaDate, description: newPoyaDesc || undefined });
+            setPoyaMsg({ type: 'success', text: 'Poya day added' });
+            setNewPoyaDate(''); setNewPoyaDesc('');
+            fetchPoyaDays();
+            fetchPayroll(); // recalculate with new poya day
+        } catch (err: any) {
+            setPoyaMsg({ type: 'error', text: err.response?.data?.message || 'Failed to add' });
+        }
+        setTimeout(() => setPoyaMsg(null), 3000);
+    };
+
+    const deletePoyaDay = async (id: number) => {
+        try {
+            await api.delete(`/poya-days/${id}`);
+            fetchPoyaDays();
+            fetchPayroll();
+        } catch (err) { console.error(err); }
+    };
+
+    const openEditPoya = (p: any) => {
+        setEditingPoya(p);
+        setEditDate(p.POYA_DATE);
+        setEditDesc(p.DESCRIPTION || '');
+    };
+
+    const saveEditPoya = async () => {
+        if (!editingPoya || !editDate) return;
+        try {
+            await api.put(`/poya-days/${editingPoya.ID}`, { poya_date: editDate, description: editDesc || undefined });
+            setPoyaMsg({ type: 'success', text: 'Poya day updated' });
+            setEditingPoya(null);
+            fetchPoyaDays();
+            fetchPayroll();
+        } catch (err: any) {
+            setPoyaMsg({ type: 'error', text: err.response?.data?.message || 'Update failed' });
+        }
+        setTimeout(() => setPoyaMsg(null), 3000);
+    };
+
+    const generateAutoPreview = () => {
+        const calculated = calculatePoyaDays(autoYear);
+        const existingDates = new Set(poyaDays.map((p: any) => p.POYA_DATE));
+        const withExists = calculated.map(p => ({ ...p, exists: existingDates.has(p.date) }));
+        setAutoPreview(withExists);
+        // Pre-select all non-existing dates
+        setSelectedAuto(new Set(withExists.filter(p => !p.exists).map(p => p.date)));
+    };
+
+    const toggleAutoSelect = (date: string) => {
+        setSelectedAuto(prev => {
+            const next = new Set(prev);
+            next.has(date) ? next.delete(date) : next.add(date);
+            return next;
+        });
+    };
+
+    const bulkAddPoyaDays = async () => {
+        const toAdd = autoPreview.filter(p => selectedAuto.has(p.date));
+        if (toAdd.length === 0) return;
+        setBulkAdding(true);
+        let added = 0, skipped = 0;
+        for (const p of toAdd) {
+            try {
+                await api.post('/poya-days', { poya_date: p.date, description: p.description });
+                added++;
+            } catch { skipped++; }
+        }
+        setBulkAdding(false);
+        setPoyaMsg({ type: 'success', text: `Added ${added} Poya days${skipped > 0 ? ` (${skipped} skipped — already exist)` : ''}` });
+        setAutoPreview([]);
+        setSelectedAuto(new Set());
+        fetchPoyaDays();
+        fetchPayroll();
+        setTimeout(() => setPoyaMsg(null), 4000);
+    };
+
+    const DAY_TYPE_LABEL: Record<string, { label: string; cls: string }> = {
+        sunday_poya: { label: 'Sun/Poya', cls: 'bg-orange-100 text-orange-700' },
+        saturday:    { label: 'Saturday', cls: 'bg-blue-100 text-blue-700' },
+        weekday:     { label: 'Weekday',  cls: 'bg-slate-100 text-slate-500' },
+    };
 
     const selectedSite = sites.find(s => s.SITE_NO === siteFilter);
 
@@ -188,6 +295,16 @@ const Payroll: React.FC = () => {
                             {saving ? 'Saving...' : 'Save Payroll'}
                         </button>
                     )}
+                    {canSeePayment && otType === 'time_based' && (
+                        <button
+                            onClick={() => setShowPoyaPanel(v => !v)}
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm active:scale-95 ${showPoyaPanel ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200'}`}
+                        >
+                            <Moon className="w-4 h-4" />
+                            Poya Days
+                            {showPoyaPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                    )}
                     {payrollData.length > 0 && (
                         <button
                             onClick={exportToExcel}
@@ -201,7 +318,7 @@ const Payroll: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <div className="card p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
@@ -325,7 +442,7 @@ const Payroll: React.FC = () => {
             )}
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 {loading ? (
                     <div className="p-6 space-y-3">
                         {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-14 rounded-xl" />)}
@@ -346,9 +463,10 @@ const Payroll: React.FC = () => {
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">EPF No</th>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Staff</th>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Day Type</th>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In / Out</th>
                                             <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Def. In</th>
-                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Def. Out</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Def. Out / Cut</th>
                                             <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Extra Hrs</th>
                                             {canSeePayment && <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Rate</th>}
                                             {canSeePayment && <th className="px-5 py-3.5 text-right text-xs font-semibold text-emerald-600 uppercase tracking-wider">Payment</th>}
@@ -378,11 +496,17 @@ const Payroll: React.FC = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {payrollData.map((row, idx) => {
                                     if (otType === 'time_based' && viewMode === 'detailed' && siteFilter) {
+                                        const dt = row.day_type || 'weekday';
+                                        const dtInfo = DAY_TYPE_LABEL[dt] || DAY_TYPE_LABEL.weekday;
+                                        const defOutDisplay = dt === 'saturday' ? '12:00 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
                                         return (
-                                            <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                            <tr key={idx} className={`hover:bg-slate-50/60 transition-colors ${dt === 'sunday_poya' ? 'bg-orange-50/40' : dt === 'saturday' ? 'bg-blue-50/30' : ''}`}>
                                                 <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.EPF_NUMBER || '-'}</td>
                                                 <td className="px-5 py-4 text-sm font-semibold text-slate-900 whitespace-nowrap">{row.NAME}</td>
                                                 <td className="px-5 py-4 text-sm text-slate-500 whitespace-nowrap">{safeFormatDate(row.TASK_DATE || row.task_date)}</td>
+                                                <td className="px-5 py-4 whitespace-nowrap">
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${dtInfo.cls}`}>{dtInfo.label}</span>
+                                                </td>
                                                 <td className="px-5 py-4 whitespace-nowrap">
                                                     <div className="flex flex-col gap-0.5 text-xs">
                                                         <span className="text-emerald-600 font-medium">In: {row.IN_TIME || '-'}</span>
@@ -390,7 +514,7 @@ const Payroll: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap font-mono">{row.default_in_time || DEFAULT_IN_TIME}</td>
-                                                <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap font-mono">{row.default_out_time || DEFAULT_OUT_TIME}</td>
+                                                <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap font-mono">{defOutDisplay}</td>
                                                 <td className="px-5 py-4 text-sm text-right font-bold text-slate-900 whitespace-nowrap">{row.extra_hours}</td>
                                                 {canSeePayment && <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap">{(row.ot_rate || 0).toFixed(2)}</td>}
                                                 {canSeePayment && (
@@ -429,7 +553,7 @@ const Payroll: React.FC = () => {
                             {canSeePayment && payrollData.length > 0 && (
                                 <tfoot className="bg-emerald-50 border-t-2 border-emerald-200">
                                     <tr>
-                                        <td colSpan={otType === 'time_based' && viewMode === 'detailed' && siteFilter ? 5 : otType === 'time_based' ? (siteFilter ? 3 : 4) : (siteFilter ? 4 : 5)}
+                                        <td colSpan={otType === 'time_based' && viewMode === 'detailed' && siteFilter ? 7 : (siteFilter ? 2 : 3)}
                                             className="px-5 py-3 text-sm font-bold text-slate-700">
                                             Grand Total
                                         </td>
@@ -455,10 +579,202 @@ const Payroll: React.FC = () => {
                 )}
             </div>
 
+            {/* Poya Days Modal */}
+            {showPoyaPanel && canSeePayment && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowPoyaPanel(false); setEditingPoya(null); setAutoPreview([]); }} />
+
+                    {/* Modal box */}
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+                        {/* Modal header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-orange-50">
+                            <div className="flex items-center gap-2">
+                                <Moon className="w-5 h-5 text-orange-500" />
+                                <span className="font-bold text-slate-800">Poya Day Management</span>
+                                <span className="text-xs text-slate-400 hidden sm:inline">— full-day OT (same as Sunday)</span>
+                            </div>
+                            <button onClick={() => { setShowPoyaPanel(false); setEditingPoya(null); setAutoPreview([]); }}
+                                className="p-1.5 hover:bg-orange-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Scrollable body */}
+                        <div className="overflow-y-auto flex-1 p-5 space-y-5">
+
+                            {/* Manual add form */}
+                            <div>
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Add Manually</p>
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Date</label>
+                                        <input type="date" value={newPoyaDate} onChange={e => setNewPoyaDate(e.target.value)}
+                                            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+                                    </div>
+                                    <div className="flex-1 min-w-[140px]">
+                                        <label className="block text-xs text-slate-500 mb-1">Description (optional)</label>
+                                        <input type="text" value={newPoyaDesc} onChange={e => setNewPoyaDesc(e.target.value)}
+                                            placeholder="e.g. Vesak Poya"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+                                    </div>
+                                    <button onClick={addPoyaDay} disabled={!newPoyaDate}
+                                        className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all active:scale-95">
+                                        <Plus className="w-4 h-4" /> Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Auto-detect */}
+                            <div className="border-t border-slate-100 pt-4">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                                    Auto-Detect from Full Moon Calendar
+                                </p>
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">Year</label>
+                                        <input type="number" value={autoYear} onChange={e => { setAutoYear(Number(e.target.value)); setAutoPreview([]); }}
+                                            min={2020} max={2040}
+                                            className="w-28 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+                                    </div>
+                                    <button onClick={generateAutoPreview}
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-all active:scale-95">
+                                        <Sparkles className="w-4 h-4" /> Calculate {autoYear}
+                                    </button>
+                                </div>
+
+                                {autoPreview.length > 0 && (
+                                    <div className="mt-3 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs font-semibold text-slate-600">{autoPreview.length} dates found:</p>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setSelectedAuto(new Set(autoPreview.filter(p => !p.exists).map(p => p.date)))}
+                                                    className="text-xs text-indigo-600 hover:underline">Select New</button>
+                                                <span className="text-slate-300">|</span>
+                                                <button onClick={() => setSelectedAuto(new Set())}
+                                                    className="text-xs text-slate-400 hover:underline">Clear All</button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {autoPreview.map(p => (
+                                                <label key={p.date}
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all
+                                                        ${p.exists ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                                                        : selectedAuto.has(p.date) ? 'bg-orange-50 border-orange-300'
+                                                        : 'bg-white border-slate-200 hover:border-orange-200'}`}>
+                                                    <input type="checkbox"
+                                                        checked={selectedAuto.has(p.date)}
+                                                        disabled={p.exists}
+                                                        onChange={() => !p.exists && toggleAutoSelect(p.date)}
+                                                        className="w-3.5 h-3.5 accent-orange-500" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-bold text-slate-700">{p.date}</p>
+                                                        <p className="text-xs text-slate-400 truncate">{p.description}</p>
+                                                    </div>
+                                                    {p.exists && <Check className="w-3 h-3 text-emerald-500 shrink-0" />}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        {selectedAuto.size > 0 && (
+                                            <button onClick={bulkAddPoyaDays} disabled={bulkAdding}
+                                                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-all active:scale-95">
+                                                <Moon className="w-4 h-4" />
+                                                {bulkAdding ? 'Adding...' : `Add ${selectedAuto.size} Poya Days`}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {poyaMsg && (
+                                <div className={`px-4 py-2.5 rounded-xl text-sm font-medium ${poyaMsg.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-rose-50 border border-rose-200 text-rose-800'}`}>
+                                    {poyaMsg.text}
+                                </div>
+                            )}
+
+                            {/* Poya days list */}
+                            <div className="border-t border-slate-100 pt-4">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saved Poya Days</p>
+                                {poyaDays.length === 0 ? (
+                                    <p className="text-sm text-slate-400 text-center py-6">No Poya days added yet</p>
+                                ) : (
+                                    <div className="rounded-xl border border-slate-100 overflow-hidden">
+                                        <table className="min-w-full divide-y divide-slate-100">
+                                            <thead className="bg-slate-50">
+                                                <tr>
+                                                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                                                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Day</th>
+                                                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
+                                                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50 bg-white">
+                                                {poyaDays.map((p: any) => {
+                                                    const d = new Date(p.POYA_DATE);
+                                                    const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+                                                    const isEditing = editingPoya?.ID === p.ID;
+                                                    return (
+                                                        <tr key={p.ID} className={`transition-colors ${isEditing ? 'bg-orange-50' : 'hover:bg-slate-50/60'}`}>
+                                                            <td className="px-4 py-3">
+                                                                {isEditing
+                                                                    ? <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+                                                                        className="px-2 py-1 bg-white border border-orange-300 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-orange-400 focus:border-transparent w-36" />
+                                                                    : <span className="text-sm font-mono text-slate-700">{p.POYA_DATE}</span>}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">{dayName}</span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                {isEditing
+                                                                    ? <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
+                                                                        placeholder="e.g. Vesak Poya"
+                                                                        className="w-full px-2 py-1 bg-white border border-orange-300 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-orange-400 focus:border-transparent" />
+                                                                    : <span className="text-sm text-slate-500">{p.DESCRIPTION || '—'}</span>}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                {isEditing ? (
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        <button onClick={saveEditPoya}
+                                                                            className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                                                                            Save
+                                                                        </button>
+                                                                        <button onClick={() => setEditingPoya(null)}
+                                                                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center justify-end gap-1">
+                                                                        <button onClick={() => openEditPoya(p)}
+                                                                            className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                                                            <Pencil className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                        <button onClick={() => deletePoyaDay(p.ID)}
+                                                                            className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Payroll Saved History Panel */}
             {showPayrollHistory && (
                 <div className="space-y-4">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="card p-5">
                         <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
                             <History className="w-4 h-4 text-indigo-600" />
                             Saved Payroll History
@@ -484,11 +800,11 @@ const Payroll: React.FC = () => {
                     </div>
 
                     {histLoading ? (
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-3">
+                        <div className="card p-6 space-y-3">
                             {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 rounded-xl" />)}
                         </div>
                     ) : payrollHistory.length === 0 ? (
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-12 text-center">
+                        <div className="card py-12 text-center">
                             <FileText className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                             <p className="text-sm font-semibold text-slate-500">No saved payroll history found</p>
                         </div>
@@ -504,7 +820,7 @@ const Payroll: React.FC = () => {
                             const totalPayment = rows.reduce((s: number, r: any) => s + (Number(r.EXTRA_PAYMENT) || 0), 0);
                             const totalUnitsH = rows.reduce((s: number, r: any) => s + (Number(r.EXTRA_UNITS) || 0), 0);
                             return (
-                                <div key={batchId} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                                <div key={batchId} className="card overflow-hidden">
                                     <div className="bg-indigo-600 px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1">
                                         <span className="text-white font-bold text-sm">{first.SITE_NO} — {first.SITE_NAME}</span>
                                         <span className="text-indigo-200 text-xs">{first.DATE_FROM} → {first.DATE_TO}</span>

@@ -10,7 +10,8 @@ import {
     getSitePerformanceAnalysis,
     getSiteProfitability,
     getInvoiceAnalysis,
-    getSiteSnapshot
+    getSiteSnapshot,
+    getTimeSitePerformance
 } from '../controllers/analyticsController';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 
@@ -30,5 +31,6 @@ router.get('/site-performance', getSitePerformanceAnalysis);
 router.get('/profitability', getSiteProfitability);
 router.get('/invoice-analysis', getInvoiceAnalysis);
 router.get('/site-snapshot/:site_id', getSiteSnapshot);
+router.get('/time-site-performance', getTimeSitePerformance);
 
 export default router;

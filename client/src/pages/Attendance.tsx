@@ -75,7 +75,7 @@ const AttendancePage: React.FC = () => {
             </div>
 
             {/* Filters & Toggle */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <div className="card p-5">
                 <div className="flex flex-col gap-4">
                     {/* View Toggle */}
                     <div className="flex gap-2">
@@ -190,7 +190,7 @@ const AttendancePage: React.FC = () => {
 
             {/* Content */}
             {siteFilter ? (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="card overflow-hidden">
                     {loading ? (
                         <div className="p-6 space-y-3">
                             {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-14 rounded-xl" />)}
@@ -319,7 +319,7 @@ const AttendancePage: React.FC = () => {
                     )}
                 </div>
             ) : (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 text-center">
+                <div className="card py-16 text-center">
                     <MapPin className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                     <h3 className="text-base font-semibold text-slate-900 mb-1">Select a site</h3>
                     <p className="text-sm text-slate-500">Choose a site above to view attendance records</p>

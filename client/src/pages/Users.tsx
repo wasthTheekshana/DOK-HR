@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { User, Site } from '../types';
-import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2 } from 'lucide-react';
+import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Users: React.FC = () => {
@@ -24,6 +24,12 @@ const Users: React.FC = () => {
     const [fixSalary, setFixSalary] = useState<number | string>('');
     const [saving, setSaving] = useState(false);
 
+    // Reset password modal
+    const [resetUser, setResetUser]       = useState<User | null>(null);
+    const [resetPwd, setResetPwd]         = useState('');
+    const [resetShowPwd, setResetShowPwd] = useState(false);
+    const [resetSaving, setResetSaving]   = useState(false);
+
     useEffect(() => {
         const t = setTimeout(() => { fetchUsers(); fetchSites(); }, 300);
         return () => clearTimeout(t);
@@ -45,7 +51,7 @@ const Users: React.FC = () => {
     const handleOpenModal = (user?: User) => {
         if (user) {
             setEditingUser(user); setEpfNumber(user.EPF_NUMBER); setName(user.NAME);
-            setRole(user.ROLE); setStatus(user.STATUS); setSiteId(user.SITE_ID || '');
+            setRole(user.ROLE); setStatus(user.INACTIVATION_REQUESTED ? 'inactive' : (user.STATUS || 'active')); setSiteId(user.SITE_ID || '');
             setBasicSalary(user.BASIC_SALARY || ''); setOtPercentage(user.OT_PERCENTAGE || ''); setFixSalary(user.FIX_SALARY || ''); setPassword('');
         } else {
             setEditingUser(null); setEpfNumber(''); setName(''); setRole('staff');
@@ -92,6 +98,19 @@ const Users: React.FC = () => {
         catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
     };
 
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resetUser || !resetPwd) return;
+        if (resetPwd.length < 6) { alert('Password must be at least 6 characters'); return; }
+        setResetSaving(true);
+        try {
+            await api.patch(`/users/${resetUser.ID}`, { password: resetPwd });
+            setResetUser(null); setResetPwd('');
+            alert(`Password updated for ${resetUser.NAME}`);
+        } catch (err: any) { alert(err.response?.data?.message || 'Failed to reset password'); }
+        finally { setResetSaving(false); }
+    };
+
     const getRoleConfig = (r: string) => {
         switch (r) {
             case 'admin': return { bg: 'bg-red-100', text: 'text-red-700', icon: Shield };
@@ -117,7 +136,7 @@ const Users: React.FC = () => {
         <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900">Team Management</h1>
+                    <h1 className="text-xl font-bold text-slate-900 tracking-tight">Team Management</h1>
                     <p className="text-slate-500 text-sm mt-0.5">{users.length} member{users.length !== 1 ? 's' : ''}</p>
                 </div>
                 {currentUserRole === 'admin' && (
@@ -132,10 +151,10 @@ const Users: React.FC = () => {
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="text" placeholder="Search name or EPF number..."
                         value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" />
+                        className="w-full pl-10 pr-4 form-input" />
                 </div>
                 {currentUserRole === 'admin' && (
-                    <div className="flex gap-2 bg-white border-2 border-slate-200 rounded-xl p-1">
+                    <div className="flex gap-1.5 bg-slate-100 rounded-xl p-1">
                         {filterButtons.map(btn => (
                             <button key={btn.key} onClick={() => setRoleFilter(btn.key)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${roleFilter === btn.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -146,7 +165,7 @@ const Users: React.FC = () => {
                 )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead>
@@ -155,9 +174,9 @@ const Users: React.FC = () => {
                                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">EPF</th>
                                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
                                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Site</th>
-                                {currentUserRole === 'admin' && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Basic Salary</th>}
-                                {currentUserRole === 'admin' && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">OT%</th>}
-                                {currentUserRole === 'admin' && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Fix Salary</th>}
+                                {['admin', 'system_admin'].includes(currentUserRole ?? '') && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Basic Salary</th>}
+                                {['admin', 'system_admin'].includes(currentUserRole ?? '') && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">OT%</th>}
+                                {['admin', 'system_admin'].includes(currentUserRole ?? '') && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Fix Salary</th>}
                                 <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                                 <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -189,17 +208,17 @@ const Users: React.FC = () => {
                                                 <span className="text-sm text-slate-500">{userSite ? userSite.SITE_NO : '—'}</span>
                                             </div>
                                         </td>
-                                        {currentUserRole === 'admin' && (
+                                        {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
                                             <td className="px-5 py-3.5 hidden lg:table-cell">
                                                 <span className="text-sm text-slate-600 font-medium">{user.BASIC_SALARY ? `Rs. ${Number(user.BASIC_SALARY).toLocaleString()}` : '—'}</span>
                                             </td>
                                         )}
-                                        {currentUserRole === 'admin' && (
+                                        {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
                                             <td className="px-5 py-3.5 hidden lg:table-cell">
                                                 <span className="text-sm text-slate-500">{user.OT_PERCENTAGE ? `${user.OT_PERCENTAGE}%` : '—'}</span>
                                             </td>
                                         )}
-                                        {currentUserRole === 'admin' && (
+                                        {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
                                             <td className="px-5 py-3.5 hidden lg:table-cell">
                                                 <span className="text-sm text-slate-600 font-medium">{user.FIX_SALARY ? `Rs. ${Number(user.FIX_SALARY).toLocaleString()}` : '—'}</span>
                                             </td>
@@ -218,7 +237,13 @@ const Users: React.FC = () => {
                                                 <button onClick={() => handleOpenModal(user)} className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors" title="Edit">
                                                     <Edit className="w-3.5 h-3.5" />
                                                 </button>
-                                                {currentUserRole === 'admin' && (
+                                                {['admin', 'system_admin'].includes(currentUserRole || '') && (
+                                                    <button onClick={() => { setResetUser(user); setResetPwd(''); setResetShowPwd(false); }}
+                                                        className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors" title="Reset Password">
+                                                        <KeyRound className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                                {['admin', 'system_admin'].includes(currentUserRole || '') && (
                                                     <button onClick={() => handleDelete(user.ID)} className="p-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors" title="Delete">
                                                         <Trash2 className="w-3.5 h-3.5" />
                                                     </button>
@@ -239,6 +264,59 @@ const Users: React.FC = () => {
                 )}
             </div>
 
+            {/* ── Reset Password Modal ── */}
+            {resetUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setResetUser(null)} />
+                    <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
+                                    <KeyRound className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-900">Reset Password</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">{resetUser.NAME}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setResetUser(null)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                                <X className="w-5 h-5 text-slate-400" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleResetPassword} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">New Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={resetShowPwd ? 'text' : 'password'}
+                                        value={resetPwd}
+                                        onChange={e => setResetPwd(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 pr-10 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm"
+                                        placeholder="Min. 6 characters"
+                                        required minLength={6}
+                                    />
+                                    <button type="button" onClick={() => setResetShowPwd(v => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        {resetShowPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-1">
+                                <button type="button" onClick={() => setResetUser(null)}
+                                    className="flex-1 py-2.5 border-2 border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors text-sm">
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={resetSaving}
+                                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                                    {resetSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                                    Set Password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
@@ -257,7 +335,7 @@ const Users: React.FC = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">EPF Number *</label>
-                                        <input type="text" required disabled={!!editingUser} value={epfNumber} onChange={e => setEpfNumber(e.target.value)}
+                                        <input type="text" required disabled={!!editingUser && currentUserRole !== 'admin'} value={epfNumber} onChange={e => setEpfNumber(e.target.value)}
                                             className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm disabled:bg-slate-50"
                                             placeholder="EPF12345" />
                                     </div>
@@ -303,26 +381,28 @@ const Users: React.FC = () => {
                                     </select>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Basic Salary (Rs.)</label>
-                                        <input type="number" min="0" step="1" value={basicSalary} onChange={e => setBasicSalary(e.target.value)}
-                                            onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
+                                {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Basic Salary (Rs.)</label>
+                                            <input type="number" min="0" step="1" value={basicSalary} onChange={e => setBasicSalary(e.target.value)}
+                                                onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
+                                                className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">OT Percentage (%)</label>
+                                            <input type="number" min="0" max="100" step="1" value={otPercentage} onChange={e => setOtPercentage(e.target.value)}
+                                                onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
+                                                className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Fix Salary (Rs.)</label>
+                                            <input type="number" min="0" step="1" value={fixSalary} onChange={e => setFixSalary(e.target.value)}
+                                                onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
+                                                className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">OT Percentage (%)</label>
-                                        <input type="number" min="0" max="100" step="1" value={otPercentage} onChange={e => setOtPercentage(e.target.value)}
-                                            onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Fix Salary (Rs.)</label>
-                                        <input type="number" min="0" step="1" value={fixSalary} onChange={e => setFixSalary(e.target.value)}
-                                            onKeyDown={e => { if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault(); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="0" />
-                                    </div>
-                                </div>
+                                )}
 
                                 {currentUserRole === 'admin' ? (
                                     <div>

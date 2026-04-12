@@ -2,6 +2,53 @@ import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
 import oracledb from 'oracledb';
 
+// ─── Attendance Sync Helper ──────────────────────────────────────────────────
+// Auto-records one attendance row per staff+site+date when a task is saved.
+// time_based: upserts with in_time/out_time (updates if row already exists)
+// target_based/staff_outsource: inserts only if row doesn't exist (no times yet)
+async function syncAttendance(
+    site_id: number,
+    staff_id: number,
+    task_date: string,
+    ot_type: string,
+    in_time: string | null,
+    out_time: string | null
+) {
+    try {
+        if (ot_type === 'time_based') {
+            await execute(
+                `MERGE INTO attendance a
+                 USING (SELECT :staff_id AS staff_id, :site_id AS site_id,
+                               TO_DATE(:att_date, 'YYYY-MM-DD') AS attendance_date FROM DUAL) src
+                 ON (a.staff_id = src.staff_id AND a.site_id = src.site_id
+                     AND TRUNC(a.attendance_date) = src.attendance_date)
+                 WHEN NOT MATCHED THEN
+                   INSERT (site_id, staff_id, attendance_date, in_time, out_time)
+                   VALUES (src.site_id, src.staff_id, src.attendance_date, :in_time, :out_time)
+                 WHEN MATCHED THEN
+                   UPDATE SET a.in_time = :in_time, a.out_time = :out_time, a.updated_at = SYSTIMESTAMP`,
+                { staff_id, site_id, att_date: task_date, in_time: in_time || null, out_time: out_time || null }
+            );
+        } else {
+            // target_based / staff_outsource: record presence only, no in/out times for now
+            await execute(
+                `MERGE INTO attendance a
+                 USING (SELECT :staff_id AS staff_id, :site_id AS site_id,
+                               TO_DATE(:att_date, 'YYYY-MM-DD') AS attendance_date FROM DUAL) src
+                 ON (a.staff_id = src.staff_id AND a.site_id = src.site_id
+                     AND TRUNC(a.attendance_date) = src.attendance_date)
+                 WHEN NOT MATCHED THEN
+                   INSERT (site_id, staff_id, attendance_date)
+                   VALUES (src.site_id, src.staff_id, src.attendance_date)`,
+                { staff_id, site_id, att_date: task_date }
+            );
+        }
+    } catch (err) {
+        // Attendance sync failure must not fail the task operation
+        console.error('syncAttendance error (non-fatal):', err);
+    }
+}
+
 export const getTasks = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to, staff_id } = req.query;
     const userRole = (req as any).user.role;
@@ -53,13 +100,14 @@ export const createTask = async (req: Request, res: Response) => {
     const { site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
     try {
         await execute(
-            `INSERT INTO tasks (site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time) 
+            `INSERT INTO tasks (site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time)
        VALUES (:site_id, :staff_id, :task_description, :invoice_price, :ot_type, :target, :pay_unit_price, TO_DATE(:task_date, 'YYYY-MM-DD'), :count, :in_time, :out_time)`,
             {
                 site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count,
                 in_time: in_time || null, out_time: out_time || null
             }
         );
+        await syncAttendance(Number(site_id), Number(staff_id), task_date, ot_type, in_time || null, out_time || null);
         res.status(201).json({ message: 'Task created' });
     } catch (err) {
         console.error('createTask error:', err);
@@ -73,7 +121,7 @@ export const updateTask = async (req: Request, res: Response) => {
 
     try {
         await execute(
-            `UPDATE tasks 
+            `UPDATE tasks
            SET task_description = :task_description,
                count = :count,
                pay_unit_price = :pay_unit_price,
@@ -86,6 +134,22 @@ export const updateTask = async (req: Request, res: Response) => {
            WHERE id = :id`,
             { task_description, count, pay_unit_price, invoice_price, in_time, out_time, target, task_date, id: String(id) }
         );
+        // Sync attendance for updated task
+        const taskRes = await execute<any>(
+            `SELECT t.site_id, t.staff_id, t.ot_type FROM tasks t WHERE t.id = :id`,
+            { id: String(id) }
+        );
+        const taskRow = taskRes.rows?.[0];
+        if (taskRow && task_date) {
+            await syncAttendance(
+                Number(taskRow.SITE_ID),
+                Number(taskRow.STAFF_ID),
+                task_date,
+                taskRow.OT_TYPE,
+                in_time || null,
+                out_time || null
+            );
+        }
         res.json({ message: 'Task updated' });
     } catch (err) {
         console.error('updateTask error:', err);
@@ -103,8 +167,14 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
         for (const row of rows) {
             const { id, task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date } = row;
             if (!id) continue;
+            // Fetch task before update to get site/staff/ot_type
+            const taskRes = await execute<any>(
+                `SELECT site_id, staff_id, ot_type FROM tasks WHERE id = :id`,
+                { id }
+            );
+            const taskRow = taskRes.rows?.[0];
             await execute(
-                `UPDATE tasks 
+                `UPDATE tasks
                  SET task_description = :task_description,
                      count = :count,
                      pay_unit_price = :pay_unit_price,
@@ -116,10 +186,31 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
                  WHERE id = :id`,
                 { task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date, id }
             );
+            if (taskRow && task_date) {
+                await syncAttendance(
+                    Number(taskRow.SITE_ID),
+                    Number(taskRow.STAFF_ID),
+                    task_date,
+                    taskRow.OT_TYPE,
+                    in_time || null,
+                    out_time || null
+                );
+            }
         }
         res.json({ message: 'Bulk update complete' });
     } catch (err) {
         console.error('bulkSave error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const deleteTask = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        await execute(`DELETE FROM tasks WHERE id = :id`, { id: Number(id) });
+        res.json({ message: 'Task deleted' });
+    } catch (err) {
+        console.error('deleteTask error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 };

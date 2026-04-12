@@ -135,10 +135,13 @@ export const updateUser = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status, site_id, role, inactivation_requested } = req.body;
     const userRole = (req as any).user.role;
+    const callerId = String((req as any).user.id);
+    const targetId = String(id);
+    const isSelf = callerId === targetId;
+    const isPrivileged = userRole === 'admin' || userRole === 'system_admin';
 
     // Supervisor Restriction
     if (userRole === 'supervisor') {
-        // Can ONLY update inactivation_requested
         if (status || site_id || role) {
             return res.status(403).json({ message: 'Supervisors can only flag users for inactivation' });
         }
@@ -148,15 +151,50 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     try {
-        let updates = [];
-        const params: any = { id: String(id) };
+        let updates: string[] = [];
+        const params: any = { id: targetId };
 
-        if (status && userRole === 'admin') { updates.push('status = :status'); params.status = status; }
-        if (site_id !== undefined && userRole === 'admin') { updates.push('site_id = :site_id'); params.site_id = site_id; }
-        if (role && userRole === 'admin') { updates.push('role = :role'); params.role = role; }
-        if (req.body.basic_salary !== undefined && userRole === 'admin') { updates.push('basic_salary = :basic_salary'); params.basic_salary = req.body.basic_salary; }
-        if (req.body.ot_percentage !== undefined && userRole === 'admin') { updates.push('ot_percentage = :ot_percentage'); params.ot_percentage = req.body.ot_percentage; }
-        if (req.body.fix_salary !== undefined && userRole === 'admin') { updates.push('fix_salary = :fix_salary'); params.fix_salary = req.body.fix_salary; }
+        // Admin / system_admin fields
+        if (isPrivileged) {
+            if (status) {
+                updates.push('status = :status');
+                params.status = status;
+                // When explicitly setting inactive, clear the supervisor flag
+                if (status === 'inactive') {
+                    updates.push('inactivation_requested = 0');
+                }
+            }
+            if (site_id !== undefined)               { updates.push('site_id = :site_id');             params.site_id = site_id; }
+            if (role)                                { updates.push('role = :role');                   params.role = role; }
+            if (req.body.basic_salary !== undefined) { updates.push('basic_salary = :basic_salary');   params.basic_salary = req.body.basic_salary; }
+            if (req.body.ot_percentage !== undefined){ updates.push('ot_percentage = :ot_percentage'); params.ot_percentage = req.body.ot_percentage; }
+            if (req.body.fix_salary !== undefined)   { updates.push('fix_salary = :fix_salary');       params.fix_salary = req.body.fix_salary; }
+            if (req.body.epf_number) {
+                // Duplicate check: make sure no other user already holds this EPF
+                const dupCheck = await execute<any>(
+                    `SELECT id FROM users WHERE epf_number = :epf AND id != :id`,
+                    { epf: req.body.epf_number, id: targetId }
+                );
+                if (dupCheck.rows && dupCheck.rows.length > 0) {
+                    return res.status(409).json({ message: 'EPF number already in use by another employee' });
+                }
+                updates.push('epf_number = :epf_number');
+                params.epf_number = req.body.epf_number;
+            }
+        }
+
+        // Name: privileged users or self
+        if (req.body.name && (isPrivileged || isSelf)) {
+            updates.push('name = :name');
+            params.name = req.body.name;
+        }
+
+        // Password: privileged users can reset anyone's; self can change own
+        if (req.body.password && (isPrivileged || isSelf)) {
+            const hashed = await hashPassword(req.body.password);
+            updates.push('password = :password');
+            params.password = hashed;
+        }
 
         if (inactivation_requested !== undefined) {
             updates.push('inactivation_requested = :inactivation_requested');

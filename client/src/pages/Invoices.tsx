@@ -310,7 +310,7 @@ const Invoices: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900">Invoices</h1>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900">Invoices</h1>
                     <p className="text-slate-500 text-sm mt-0.5">Site-wise monthly cost &amp; invoice records</p>
                 </div>
                 <button onClick={openModal}
@@ -335,7 +335,7 @@ const Invoices: React.FC = () => {
             </div>
 
             {/* Invoices Table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
                         <thead>
@@ -458,7 +458,7 @@ const Invoices: React.FC = () => {
                                         value={editFields[f.key]}
                                         onChange={e => setEditFields(prev => ({ ...prev, [f.key]: e.target.value }))}
                                         onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
-                                        className={`w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm font-semibold ${f.color} transition-colors`}
+                                        className={`form-input w-full px-3.5 py-2.5 font-semibold ${f.color}`}
                                     />
                                 </div>
                             ))}
@@ -504,7 +504,7 @@ const Invoices: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Site *</label>
                                         <select value={selectedSiteId} onChange={e => { setSelectedSiteId(e.target.value); setPreview(null); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm">
+                                            className="form-input w-full px-3.5 py-2.5">
                                             <option value="">Select site…</option>
                                             {sites.map(s => <option key={s.ID} value={s.ID}>{s.SITE_NO} — {s.NAME}</option>)}
                                         </select>
@@ -512,12 +512,12 @@ const Invoices: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date From *</label>
                                         <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPreview(null); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" />
+                                            className="form-input w-full px-3.5 py-2.5" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date To *</label>
                                         <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPreview(null); }}
-                                            className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm" />
+                                            className="form-input w-full px-3.5 py-2.5" />
                                     </div>
                                 </div>
                                 <button onClick={handleCalculate} disabled={calculating || !selectedSiteId || !dateFrom || !dateTo}
@@ -660,7 +660,7 @@ const Invoices: React.FC = () => {
                                             <input type="number" min="0" step="1" value={expenseCost}
                                                 onChange={e => setExpenseCost(e.target.value)}
                                                 onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
-                                                className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm"
+                                                className="form-input w-full px-3.5 py-2.5"
                                                 placeholder="0" />
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">

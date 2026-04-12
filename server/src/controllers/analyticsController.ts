@@ -170,65 +170,63 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
 
     try {
         const [monthlyRes, siteMonthlyRes, avgHoursRes, lateStayRes] = await Promise.all([
-            // Monthly attendance trend — derived from tasks table (same source as attendance page)
+            // Monthly attendance trend — from attendance table
             execute<any>(
-                `SELECT TO_CHAR(t.task_date, 'YYYY-MM') as month,
+                `SELECT TO_CHAR(a.attendance_date, 'YYYY-MM') as month,
                     COUNT(*) as attendance_count
-                 FROM tasks t
-                 WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
-                 GROUP BY TO_CHAR(t.task_date, 'YYYY-MM')
+                 FROM attendance a
+                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 GROUP BY TO_CHAR(a.attendance_date, 'YYYY-MM')
                  ORDER BY month`,
                 { d_from: from, d_to: to }
             ),
-            // Site-wise monthly attendance trend
+            // Site-wise monthly attendance trend — from attendance table
             execute<any>(
-                `SELECT TO_CHAR(t.task_date, 'YYYY-MM') as month,
+                `SELECT TO_CHAR(a.attendance_date, 'YYYY-MM') as month,
                     s.site_no,
                     COUNT(*) as attendance_count
-                 FROM tasks t
-                 JOIN sites s ON t.site_id = s.id
-                 WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
-                 GROUP BY TO_CHAR(t.task_date, 'YYYY-MM'), s.site_no
+                 FROM attendance a
+                 JOIN sites s ON a.site_id = s.id
+                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 GROUP BY TO_CHAR(a.attendance_date, 'YYYY-MM'), s.site_no
                  ORDER BY month, s.site_no`,
                 { d_from: from, d_to: to }
             ),
-            // Average working hours per employee
+            // Average working hours per employee (only where in/out times exist — time_based sites)
             execute<any>(
                 `SELECT u.name as staff_name,
                     ROUND(AVG(
-                        CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
-                        THEN (TO_NUMBER(SUBSTR(t.out_time, 1, 2)) + TO_NUMBER(SUBSTR(t.out_time, 4, 2))/60)
-                           - (TO_NUMBER(SUBSTR(t.in_time, 1, 2)) + TO_NUMBER(SUBSTR(t.in_time, 4, 2))/60)
+                        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+                        THEN (TO_NUMBER(SUBSTR(a.out_time, 1, 2)) + TO_NUMBER(SUBSTR(a.out_time, 4, 2))/60)
+                           - (TO_NUMBER(SUBSTR(a.in_time, 1, 2)) + TO_NUMBER(SUBSTR(a.in_time, 4, 2))/60)
                         ELSE NULL END
                     ), 2) as avg_hours
-                 FROM tasks t
-                 JOIN users u ON t.staff_id = u.id
-                 WHERE t.ot_type = 'time_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 FROM attendance a
+                 JOIN users u ON a.staff_id = u.id
+                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
                  GROUP BY u.name
                  HAVING AVG(
-                    CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
-                    THEN (TO_NUMBER(SUBSTR(t.out_time, 1, 2)) + TO_NUMBER(SUBSTR(t.out_time, 4, 2))/60)
-                       - (TO_NUMBER(SUBSTR(t.in_time, 1, 2)) + TO_NUMBER(SUBSTR(t.in_time, 4, 2))/60)
+                    CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+                    THEN (TO_NUMBER(SUBSTR(a.out_time, 1, 2)) + TO_NUMBER(SUBSTR(a.out_time, 4, 2))/60)
+                       - (TO_NUMBER(SUBSTR(a.in_time, 1, 2)) + TO_NUMBER(SUBSTR(a.in_time, 4, 2))/60)
                     ELSE NULL END
                  ) IS NOT NULL
                  ORDER BY avg_hours DESC
                  FETCH FIRST 15 ROWS ONLY`,
                 { d_from: from, d_to: to }
             ),
-            // Late stay analysis (out_time > 17:00)
+            // Late stay analysis (out_time >= 17:00)
             execute<any>(
                 `SELECT u.name as staff_name, COUNT(*) as late_count
-                 FROM tasks t
-                 JOIN users u ON t.staff_id = u.id
-                 WHERE t.ot_type = 'time_based'
-                   AND t.out_time IS NOT NULL
-                   AND TO_NUMBER(SUBSTR(t.out_time, 1, 2)) >= 17
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 FROM attendance a
+                 JOIN users u ON a.staff_id = u.id
+                 WHERE a.out_time IS NOT NULL
+                   AND TO_NUMBER(SUBSTR(a.out_time, 1, 2)) >= 17
+                   AND a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
                  GROUP BY u.name
                  ORDER BY late_count DESC
                  FETCH FIRST 15 ROWS ONLY`,
@@ -647,12 +645,12 @@ export const getSitePerformanceAnalysis = async (req: Request, res: Response) =>
             execute<any>(
                 `SELECT u.name as staff_name, u.epf_number,
                     NVL(SUM(NVL(t.count, 0)), 0) as sum_count,
-                    MAX(s.daily_target) * COUNT(DISTINCT t.task_date) as total_target,
+                    MAX(s.daily_target) * 22 as total_target,
                     CASE WHEN MAX(s.daily_target) = 0 THEN 0
-                         ELSE GREATEST(0, NVL(SUM(NVL(t.count, 0)), 0) - MAX(s.daily_target) * COUNT(DISTINCT t.task_date))
+                         ELSE GREATEST(0, NVL(SUM(NVL(t.count, 0)), 0) - MAX(s.daily_target) * 22)
                     END as extra_units,
-                    CASE WHEN MAX(s.daily_target) * COUNT(DISTINCT t.task_date) > 0
-                         THEN ROUND(NVL(SUM(NVL(t.count, 0)), 0) / (MAX(s.daily_target) * COUNT(DISTINCT t.task_date)) * 100, 1)
+                    CASE WHEN MAX(s.daily_target) * 22 > 0
+                         THEN ROUND(NVL(SUM(NVL(t.count, 0)), 0) / (MAX(s.daily_target) * 22) * 100, 1)
                          ELSE 0 END as achievement_pct
                  FROM tasks t
                  JOIN sites s ON t.site_id = s.id
@@ -689,7 +687,7 @@ export const getSitePerformanceAnalysis = async (req: Request, res: Response) =>
         }));
 
         const totalActual = staffRows.reduce((s: number, r: any) => s + r.sum_count, 0);
-        const totalTarget = staffRows.reduce((s: number, r: any) => s + r.total_target, 0);
+        const totalTarget = (Number(siteInfo.DAILY_TARGET) || 0) * 22;
         const totalExtra = staffRows.reduce((s: number, r: any) => s + r.extra_units, 0);
         const avgAchievement = staffRows.length > 0
             ? Math.round(staffRows.reduce((s: number, r: any) => s + r.achievement_pct, 0) / staffRows.length * 10) / 10
@@ -1193,6 +1191,214 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
 
     } catch (err) {
         console.error('getSiteSnapshot error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ─── Time-Based Site Performance Analysis ────────────────────────────────────
+
+export const getTimeSitePerformance = async (req: Request, res: Response) => {
+    const { site_id, date_from, date_to } = req.query;
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
+    const to   = (typeof date_to   === 'string' ? date_to   : undefined) ?? new Date().toISOString().slice(0, 10);
+    if (!site_id) return res.status(400).json({ message: 'site_id is required' });
+
+    try {
+        const sid = Number(site_id);
+
+        const [siteRes, dailyRes, staffRes, taskTypeRes, monthlyRes, otRes] = await Promise.all([
+
+            // 1. Site info + supervisor
+            execute<any>(
+                `SELECT s.id, s.site_no, s.name, s.ot_type, s.service_type, s.site_type,
+                        s.daily_target, u.name AS supervisor_name
+                 FROM sites s LEFT JOIN users u ON u.id = s.supervisor_id
+                 WHERE s.id = :sid`,
+                { sid }
+            ),
+
+            // 2. Daily task records + unique workers + avg hours
+            execute<any>(
+                `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD') AS task_date,
+                        COUNT(*)                            AS task_records,
+                        COUNT(DISTINCT t.staff_id)          AS unique_workers,
+                        ROUND(AVG(
+                            CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
+                            THEN (TO_NUMBER(SUBSTR(t.out_time,1,2)) + TO_NUMBER(SUBSTR(t.out_time,4,2))/60)
+                               - (TO_NUMBER(SUBSTR(t.in_time,1,2))  + TO_NUMBER(SUBSTR(t.in_time,4,2))/60)
+                            ELSE NULL END
+                        ), 2) AS avg_hours
+                 FROM tasks t
+                 WHERE t.site_id = :sid
+                   AND t.ot_type = 'time_based'
+                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                 GROUP BY TO_CHAR(t.task_date, 'YYYY-MM-DD')
+                 ORDER BY task_date`,
+                { sid, d_from: from, d_to: to }
+            ),
+
+            // 3. Per-staff: days worked, task records, avg hours
+            execute<any>(
+                `SELECT u.name          AS staff_name,
+                        u.epf_number,
+                        COUNT(DISTINCT t.task_date)                   AS days_worked,
+                        COUNT(*)                                       AS task_records,
+                        COUNT(CASE WHEN t.in_time IS NOT NULL THEN 1 END) AS records_with_time,
+                        ROUND(AVG(
+                            CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
+                            THEN (TO_NUMBER(SUBSTR(t.out_time,1,2)) + TO_NUMBER(SUBSTR(t.out_time,4,2))/60)
+                               - (TO_NUMBER(SUBSTR(t.in_time,1,2))  + TO_NUMBER(SUBSTR(t.in_time,4,2))/60)
+                            ELSE NULL END
+                        ), 2) AS avg_hours
+                 FROM tasks t JOIN users u ON t.staff_id = u.id
+                 WHERE t.site_id = :sid
+                   AND t.ot_type = 'time_based'
+                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                 GROUP BY u.name, u.epf_number
+                 ORDER BY days_worked DESC, task_records DESC`,
+                { sid, d_from: from, d_to: to }
+            ),
+
+            // 4. Task type / activity breakdown
+            execute<any>(
+                `SELECT LOWER(TRIM(t.task_description)) AS task_type,
+                        COUNT(*)                        AS records,
+                        COUNT(DISTINCT t.staff_id)      AS staff_count,
+                        COUNT(DISTINCT t.task_date)     AS day_count
+                 FROM tasks t
+                 WHERE t.site_id = :sid
+                   AND t.ot_type = 'time_based'
+                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                 GROUP BY LOWER(TRIM(t.task_description))
+                 ORDER BY records DESC`,
+                { sid, d_from: from, d_to: to }
+            ),
+
+            // 5. Monthly trend
+            execute<any>(
+                `SELECT TO_CHAR(t.task_date, 'YYYY-MM') AS month,
+                        COUNT(*)                         AS task_records,
+                        COUNT(DISTINCT t.staff_id)       AS workers,
+                        COUNT(DISTINCT t.task_date)      AS working_days
+                 FROM tasks t
+                 WHERE t.site_id = :sid
+                   AND t.ot_type = 'time_based'
+                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
+                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                 GROUP BY TO_CHAR(t.task_date, 'YYYY-MM')
+                 ORDER BY month`,
+                { sid, d_from: from, d_to: to }
+            ),
+
+            // 6. Custom OT records for this site
+            execute<any>(
+                `SELECT cor.staff_name, cor.epf_number,
+                        TO_CHAR(cor.date_from,'YYYY-MM-DD') AS date_from,
+                        TO_CHAR(cor.date_to,  'YYYY-MM-DD') AS date_to,
+                        cor.total_extra_hours, cor.total_adjusted_hours,
+                        cor.ot_rate, cor.total_payment,
+                        cor.calculation_type,
+                        TO_CHAR(cor.saved_at,'YYYY-MM-DD HH24:MI') AS saved_at
+                 FROM custom_ot_records cor
+                 WHERE cor.site_no = (SELECT site_no FROM sites WHERE id = :sid)
+                 ORDER BY cor.saved_at DESC
+                 FETCH FIRST 100 ROWS ONLY`,
+                { sid }
+            ),
+        ]);
+
+        const siteRow = siteRes.rows?.[0];
+        if (!siteRow) return res.status(404).json({ message: 'Site not found' });
+
+        const siteInfo = {
+            id:              Number(siteRow.ID),
+            site_no:         siteRow.SITE_NO,
+            name:            siteRow.NAME,
+            ot_type:         siteRow.OT_TYPE || 'time_based',
+            service_type:    siteRow.SERVICE_TYPE || '—',
+            site_type:       siteRow.SITE_TYPE    || '—',
+            supervisor_name: siteRow.SUPERVISOR_NAME || '—',
+        };
+
+        const daily = (dailyRes.rows || []).map((r: any) => ({
+            date:           r.TASK_DATE,
+            task_records:   Number(r.TASK_RECORDS),
+            unique_workers: Number(r.UNIQUE_WORKERS),
+            avg_hours:      r.AVG_HOURS !== null && r.AVG_HOURS !== undefined ? Number(r.AVG_HOURS) : null,
+        }));
+
+        const staff = (staffRes.rows || []).map((r: any) => ({
+            staff_name:        r.STAFF_NAME,
+            epf_number:        r.EPF_NUMBER || '—',
+            days_worked:       Number(r.DAYS_WORKED),
+            task_records:      Number(r.TASK_RECORDS),
+            records_with_time: Number(r.RECORDS_WITH_TIME || 0),
+            avg_hours:         r.AVG_HOURS !== null && r.AVG_HOURS !== undefined ? Number(r.AVG_HOURS) : null,
+        }));
+
+        const taskTypes = (taskTypeRes.rows || []).map((r: any) => ({
+            task_type:   r.TASK_TYPE || '(unspecified)',
+            records:     Number(r.RECORDS),
+            staff_count: Number(r.STAFF_COUNT),
+            day_count:   Number(r.DAY_COUNT),
+        }));
+
+        const monthly = (monthlyRes.rows || []).map((r: any) => ({
+            month:        r.MONTH,
+            task_records: Number(r.TASK_RECORDS),
+            workers:      Number(r.WORKERS),
+            working_days: Number(r.WORKING_DAYS),
+        }));
+
+        const otRecords = (otRes.rows || []).map((r: any) => ({
+            staff_name:           r.STAFF_NAME,
+            epf_number:           r.EPF_NUMBER || '—',
+            date_from:            r.DATE_FROM,
+            date_to:              r.DATE_TO,
+            total_extra_hours:    Number(r.TOTAL_EXTRA_HOURS    || 0),
+            total_adjusted_hours: Number(r.TOTAL_ADJUSTED_HOURS || 0),
+            ot_rate:              Number(r.OT_RATE              || 0),
+            total_payment:        Number(r.TOTAL_PAYMENT        || 0),
+            calculation_type:     r.CALCULATION_TYPE || '—',
+            saved_at:             r.SAVED_AT,
+        }));
+
+        const totalTaskRecords = daily.reduce((s: number, d: any) => s + d.task_records, 0);
+        const totalOtPaid      = otRecords.reduce((s: number, o: any) => s + o.total_payment, 0);
+        const activeDays       = daily.length;
+        const avgDailyWorkers  = activeDays > 0
+            ? Math.round(daily.reduce((s: number, d: any) => s + d.unique_workers, 0) / activeDays * 10) / 10
+            : 0;
+        const peakDay          = daily.length > 0
+            ? daily.reduce((max: any, d: any) => d.unique_workers > max.unique_workers ? d : max, daily[0])
+            : null;
+        const hasTimeData      = staff.some((s: any) => s.avg_hours !== null);
+
+        res.json({
+            dateRange: { from, to },
+            siteInfo,
+            summary: {
+                totalTaskRecords,
+                totalOtPaid,
+                uniqueStaff:      staff.length,
+                activeDays,
+                avgDailyWorkers,
+                peakWorkers:      peakDay?.unique_workers ?? 0,
+                peakDate:         peakDay?.date ?? null,
+                hasTimeData,
+            },
+            daily,
+            staff,
+            taskTypes,
+            monthly,
+            otRecords,
+        });
+
+    } catch (err) {
+        console.error('getTimeSitePerformance error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 };

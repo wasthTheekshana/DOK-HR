@@ -13,6 +13,7 @@ import Reports from './pages/Reports';
 import Analytics from './pages/Analytics';
 import Dashboard from './pages/Dashboard';
 import SitePerformance from './pages/SitePerformance';
+import TimeSitePerformance from './pages/TimeSitePerformance';
 import Invoices from './pages/Invoices';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,6 +50,7 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="site-performance" element={<SitePerformance />} />
+            <Route path="time-site-performance" element={<TimeSitePerformance />} />
             <Route path="invoices" element={<Invoices />} />
           </Route>
         </Routes>

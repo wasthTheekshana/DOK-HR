@@ -44,14 +44,14 @@ const MetricCard: React.FC<{ label: string; value: string | number; sub?: string
                 </span>
             )}
         </div>
-        <p className="text-2xl font-black text-slate-900 mt-3">{value}</p>
+        <p className="text-xl font-bold tracking-tight text-slate-900 mt-3">{value}</p>
         <p className="text-xs font-semibold text-slate-500 mt-0.5 uppercase tracking-wider">{label}</p>
         {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
     </div>
 );
 
 const ChartCard: React.FC<{ title: string; children: React.ReactNode; className?: string }> = ({ title, children, className = '' }) => (
-    <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm p-5 ${className}`}>
+    <div className={`card p-5 ${className}`}>
         <h3 className="text-sm font-bold text-slate-700 mb-4">{title}</h3>
         {children}
     </div>
@@ -598,7 +598,7 @@ const Analytics: React.FC = () => {
 
                     {/* OT Summary Table */}
                     {!loadingPayroll && payrollData?.siteOTBreakdown?.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="card overflow-hidden">
                             <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
                                 <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
                                     <DollarSign className="w-4 h-4 text-amber-600" />
@@ -788,7 +788,7 @@ const Analytics: React.FC = () => {
                     ) : !siteData?.sites?.length ? <EmptyChart message="No sites found" /> : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {siteData.sites.map((site: any) => (
-                                <div key={site.site_id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                <div key={site.site_id} className="card p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -931,7 +931,7 @@ const Analytics: React.FC = () => {
 
                     {/* Detailed Summary Table */}
                     {!loadingSite && siteData?.sites?.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="card overflow-hidden">
                             <div className="px-5 py-4 border-b border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-700">Site Metrics Summary Table</h3>
                             </div>
@@ -1083,7 +1083,7 @@ const Analytics: React.FC = () => {
 
                         {/* Per-site totals table */}
                         {!loadingSiteCount && trend.length > 0 && sites.length > 0 && (
-                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="card overflow-hidden">
                                 <div className="px-5 py-4 border-b border-slate-100">
                                     <h3 className="text-sm font-bold text-slate-700">Site Count Summary</h3>
                                 </div>
@@ -1232,7 +1232,7 @@ const Analytics: React.FC = () => {
                                 </div>
 
                                 {/* ── Bar Chart ── */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                <div className="card p-5">
                                     <h3 className="text-sm font-bold text-slate-700 mb-4">
                                         Revenue vs Cost vs Profit — {profitTab === 'service' ? 'By Service Type' : profitTab === 'site_type' ? 'By Site Type' : profitTab === 'ot_type' ? 'By OT Type' : 'All Sites'}
                                     </h3>
@@ -1260,7 +1260,7 @@ const Analytics: React.FC = () => {
                                 </div>
 
                                 {/* ── Data Table ── */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                                <div className="card overflow-hidden">
                                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                                         <h3 className="text-sm font-bold text-slate-700">Detailed Breakdown</h3>
                                         <span className="text-xs text-slate-400">{groupData.length} {profitTab === 'all' ? 'sites' : 'groups'}</span>
@@ -1399,7 +1399,7 @@ const Analytics: React.FC = () => {
                                 </div>
 
                                 {/* ── Revenue / Cost / Profit Trend ── */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                <div className="card p-5">
                                     <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                                         <h3 className="text-sm font-bold text-slate-700">Revenue · Cost · Profit Trend</h3>
                                         <div className="flex gap-1.5">
@@ -1442,7 +1442,7 @@ const Analytics: React.FC = () => {
                                 {/* ── Cost Structure + Monthly Cost Breakdown ── */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                                     {/* Cost Structure Pie */}
-                                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                    <div className="card p-5">
                                         <h3 className="text-sm font-bold text-slate-700 mb-4">Revenue Allocation (Cost Structure)</h3>
                                         {(ia?.costStructure || []).every((c: any) => c.value === 0)
                                             ? <EmptyChart message="No invoice data available" />
@@ -1475,7 +1475,7 @@ const Analytics: React.FC = () => {
                                     </div>
 
                                     {/* Cost Composition Stack per month */}
-                                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                                    <div className="card p-5">
                                         <h3 className="text-sm font-bold text-slate-700 mb-4">Cost Composition by Month</h3>
                                         {(ia?.monthlyTrend || []).length === 0 ? <EmptyChart /> : (
                                             <ResponsiveContainer width="100%" height={280}>
@@ -1495,7 +1495,7 @@ const Analytics: React.FC = () => {
                                 </div>
 
                                 {/* ── Site Detail Tabs ── */}
-                                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                                <div className="card overflow-hidden">
                                     <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
                                         <h3 className="text-sm font-bold text-slate-700 mr-2">Site Invoice Breakdown</h3>
                                         {([

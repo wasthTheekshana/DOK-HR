@@ -1,7 +1,24 @@
 # CI/CD Guide — DOK-HR with Jenkins + GitHub on Linux
 
 This guide sets up an automated pipeline:
-**Push to `main` branch → GitHub webhook → Jenkins → Build → Deploy → PM2 reload**
+**Push to `main` branch → Jenkins detects change → Build → Deploy → PM2 reload**
+
+---
+
+## Important: Private/LAN Server (No Public IP)
+
+Your server is on a **private network** (`192.168.x.x`).
+GitHub **cannot send webhooks** to a private IP — the internet cannot reach it.
+
+You have two options:
+
+| Option | How it works | Best for |
+|--------|-------------|---------|
+| **Option A — SCM Polling** | Jenkins checks GitHub every few minutes | Simple, no config needed |
+| **Option B — Cloudflare Tunnel** | Creates a secure public URL for your server | Real-time, free |
+
+**Recommended: Use Option A (SCM Polling)** — it works immediately with zero extra setup.
+If you want instant deploys, follow Option B.
 
 ---
 
@@ -311,7 +328,14 @@ In Jenkins dashboard → **New Item**:
 - ✓ GitHub project
 - Project URL: `https://github.com/YOUR_USERNAME/DOK-HR/`
 
-**Build Triggers:**
+**Build Triggers — Choose ONE:**
+
+**Option A (Recommended for LAN/private server) — SCM Polling:**
+- ✓ **Poll SCM**
+- Schedule: `H/5 * * * *`
+  _(checks GitHub every 5 minutes; change to `H/2` for every 2 min)_
+
+**Option B (if using Cloudflare Tunnel) — Webhook:**
 - ✓ **GitHub hook trigger for GITScm polling**
 
 **Pipeline:**
@@ -474,7 +498,97 @@ server {
 
 ---
 
-## Part 10 — Test the Full Pipeline
+## Part 10 — Option B: Cloudflare Tunnel (Webhook on Private Server)
+
+Skip this section if you are using **Option A (SCM Polling)**.
+
+Cloudflare Tunnel creates a secure public HTTPS URL that forwards to your local Jenkins — no port forwarding or public IP needed. It is **free**.
+
+### 10.1 Install cloudflared on the Server
+
+```bash
+# Download and install
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+sudo dpkg -i cloudflared.deb
+cloudflared --version
+```
+
+### 10.2 Login to Cloudflare
+
+```bash
+cloudflared tunnel login
+```
+
+This opens a browser link — visit it, select your Cloudflare domain, and authorize.
+A certificate file is saved to `~/.cloudflared/cert.pem`.
+
+> If you don't have a Cloudflare account: sign up free at https://dash.cloudflare.com
+
+### 10.3 Create the Tunnel
+
+```bash
+# Create a tunnel named "jenkins"
+cloudflared tunnel create jenkins
+
+# This outputs a Tunnel ID like: abc1234-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# Note it down
+```
+
+### 10.4 Create Tunnel Config File
+
+```bash
+nano ~/.cloudflared/config.yml
+```
+
+```yaml
+tunnel: YOUR_TUNNEL_ID
+credentials-file: /root/.cloudflared/YOUR_TUNNEL_ID.json
+
+ingress:
+  - hostname: jenkins.yourdomain.com
+    service: http://localhost:8080
+  - service: http_status:404
+```
+
+Replace:
+- `YOUR_TUNNEL_ID` with the ID from step 10.3
+- `jenkins.yourdomain.com` with a subdomain on your Cloudflare-managed domain
+
+### 10.5 Route DNS
+
+```bash
+cloudflared tunnel route dns jenkins jenkins.yourdomain.com
+```
+
+### 10.6 Run Tunnel as a Service
+
+```bash
+sudo cloudflared service install
+sudo systemctl start cloudflared
+sudo systemctl enable cloudflared
+sudo systemctl status cloudflared
+```
+
+### 10.7 Test the Tunnel
+
+Open in browser: `https://jenkins.yourdomain.com`
+You should see the Jenkins login page.
+
+### 10.8 Add Webhook to GitHub
+
+Now that Jenkins is publicly reachable:
+
+- Go to GitHub repo → **Settings → Webhooks → Add webhook**
+- Payload URL: `https://jenkins.yourdomain.com/github-webhook/`
+- Content type: `application/json`
+- Event: **Just the push event**
+- Click **Add webhook**
+
+In Jenkins job → Build Triggers → ✓ **GitHub hook trigger for GITScm polling**
+
+---
+
+## Part 11 — Test the Full Pipeline
 
 ### 10.1 Manual First Run
 
@@ -572,7 +686,8 @@ sudo ss -tlnp | grep 8082
 
 | Problem | Likely Cause | Fix |
 |---------|-------------|-----|
-| Webhook not triggering | Jenkins not reachable from internet | Open port 8080 in firewall, or use ngrok for testing |
+| Webhook not triggering | Server has private IP (192.168.x.x) — GitHub cannot reach it | Use **SCM Polling** (Part 5) OR set up **Cloudflare Tunnel** (Part 10) |
+| SCM poll not running | Wrong cron syntax | Use `H/5 * * * *` exactly as shown |
 | `pm2: command not found` in pipeline | PM2 path not in Jenkins PATH | Add full path `/usr/local/bin/pm2` or fix PATH in Jenkinsfile |
 | Permission denied on deploy dir | Jenkins user has no write access | `sudo chown -R jenkins /home/dokHr/DOK-HR` |
 | `npm run build` fails | Wrong Node version | Check `node -v` in pipeline; ensure NodeJS tool is configured |

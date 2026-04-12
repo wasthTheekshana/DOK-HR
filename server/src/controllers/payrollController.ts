@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
-import { calculateTimeBasedExtra, calculateTimeBasedPayment, calculateTargetBasedExtra, calculateTargetBasedPayment } from '../utils/payrollUtils';
+import { calculateTimeBasedExtra, calculateTimeBasedPayment, calculateTargetBasedExtra, calculateTargetBasedPayment, getDayType } from '../utils/payrollUtils';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 const DEFAULT_OUT_TIME = '17:00';
@@ -17,8 +17,19 @@ export const getPayroll = async (req: Request, res: Response) => {
 
     try {
         if (ot_type === 'time_based') {
+            // Fetch poya dates in range to determine day type per row
+            const poyaResult = await execute<any>(
+                `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
+                 WHERE poya_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')`,
+                { date_from: String(date_from), date_to: String(date_to) }
+            );
+            const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => r.POYA_DATE as string));
+
+            // Group by staff+date so multiple tasks on the same day don't double-count OT.
+            // Use MIN(in_time) and MAX(out_time) to capture the full shift span.
             let query = `
-                SELECT t.staff_id, u.epf_number, u.name, s.site_no, s.name as site_name, t.task_date, t.in_time, t.out_time, u.basic_salary
+                SELECT t.staff_id, u.epf_number, u.name, s.site_no, s.name as site_name,
+                       t.task_date, MIN(t.in_time) as in_time, MAX(t.out_time) as out_time, u.basic_salary
                 FROM tasks t
                 JOIN users u ON t.staff_id = u.id
                 JOIN sites s ON t.site_id = s.id
@@ -33,16 +44,19 @@ export const getPayroll = async (req: Request, res: Response) => {
                 params.site_no = String(site_no);
             }
 
+            query += ` GROUP BY t.staff_id, u.epf_number, u.name, s.site_no, s.name, t.task_date, u.basic_salary`;
             query += ` ORDER BY s.site_no, u.name, t.task_date`;
 
             const result = await execute<any>(query, params);
             const rows = (result.rows || []).map((row: any) => {
-                const extraHours = calculateTimeBasedExtra(row.OUT_TIME, DEFAULT_OUT_TIME, row.IN_TIME, DEFAULT_IN_TIME);
+                const dayType = getDayType(row.TASK_DATE, poyaDates);
+                const extraHours = calculateTimeBasedExtra(row.OUT_TIME, DEFAULT_OUT_TIME, row.IN_TIME, DEFAULT_IN_TIME, dayType);
                 const { payment: extraPayment, rate: otRate } = calculateTimeBasedPayment(extraHours, row.BASIC_SALARY || 0);
                 return {
                     ...row,
                     default_in_time: DEFAULT_IN_TIME,
                     default_out_time: DEFAULT_OUT_TIME,
+                    day_type: dayType,
                     extra_hours: extraHours,
                     ot_rate: otRate,
                     extra_payment: extraPayment
@@ -155,10 +169,19 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
     }
 
     try {
-        // Query to get both custom OT percentage staff (not 0 or 90) AND 90% staff
+        // Fetch poya dates in range
+        const poyaResult = await execute<any>(
+            `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
+             WHERE poya_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')`,
+            { date_from: String(date_from), date_to: String(date_to) }
+        );
+        const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => r.POYA_DATE as string));
+
+        // Group by staff+date to avoid double-OT when staff has multiple tasks on same day
         let query = `
-            SELECT t.staff_id, u.epf_number, u.name as staff_name, s.site_no, s.name as site_name, 
-                   t.task_date, t.in_time, t.out_time, u.basic_salary, u.ot_percentage
+            SELECT t.staff_id, u.epf_number, u.name as staff_name, s.site_no, s.name as site_name,
+                   t.task_date, MIN(t.in_time) as in_time, MAX(t.out_time) as out_time,
+                   u.basic_salary, u.ot_percentage
             FROM tasks t
             JOIN sites s ON t.site_id = s.id
             JOIN users u ON t.staff_id = u.id
@@ -173,11 +196,13 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
             params.site_id = Number(site_id);
         }
 
+        query += ` GROUP BY t.staff_id, u.epf_number, u.name, s.site_no, s.name, t.task_date, u.basic_salary, u.ot_percentage`;
         query += ` ORDER BY s.site_no, u.name, t.task_date`;
 
         const result = await execute<any>(query, params);
         const rows = (result.rows || []).map((row: any) => {
-            const extraHours = calculateTimeBasedExtra(row.OUT_TIME, DEFAULT_OUT_TIME, row.IN_TIME, DEFAULT_IN_TIME);
+            const dayType = getDayType(row.TASK_DATE, poyaDates);
+            const extraHours = calculateTimeBasedExtra(row.OUT_TIME, DEFAULT_OUT_TIME, row.IN_TIME, DEFAULT_IN_TIME, dayType);
             const otPercentage = row.OT_PERCENTAGE || 0;
 
             let adjustedExtraHours: number;
@@ -217,6 +242,7 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
                 basic_salary: row.BASIC_SALARY,
                 original_ot_percentage: otPercentage,
                 calculation_type: calculationType,
+                day_type: dayType,
                 extra_hours: extraHours,
                 custom_percentage: otPercentage === 90 ? null : customPercentage,
                 adjusted_extra_hours: adjustedExtraHours,

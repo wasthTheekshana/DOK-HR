@@ -1,32 +1,88 @@
+export type DayType = 'weekday' | 'saturday' | 'sunday_poya';
+
+const SAT_OT_START = '12:00';
+
+const toMinutes = (t: string): number => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+};
+
+/**
+ * Determines the day type for OT calculation:
+ * - sunday_poya: Sunday OR any date in poyaDates (full-day OT)
+ * - saturday:    Saturday (OT after 12:00 + early arrival before default in)
+ * - weekday:     Mon–Fri (OT before default in + after default out)
+ */
+const toLocalDateStr = (d: Date): string => {
+    // Use LOCAL date parts (getFullYear/Month/Date) so timezone offsets
+    // don't shift the date — toISOString() is always UTC and causes off-by-one
+    // on servers running in UTC+5:30 (Sri Lanka) or any positive offset.
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+export const getDayType = (taskDate: Date | string, poyaDates: Set<string>): DayType => {
+    const d = typeof taskDate === 'string' ? new Date(taskDate) : taskDate;
+    const dayOfWeek = d.getDay(); // 0=Sun, 6=Sat
+    const dateStr = toLocalDateStr(d); // YYYY-MM-DD in local time
+
+    if (dayOfWeek === 0) return 'sunday_poya';
+    if (poyaDates.has(dateStr)) return 'sunday_poya';
+    if (dayOfWeek === 6) return 'saturday';
+    return 'weekday';
+};
+
+/**
+ * Calculates extra (OT) hours based on day type:
+ *
+ * sunday_poya → full working hours (out - in) = all OT
+ * saturday    → early arrival (before default_in) + after 12:00
+ * weekday     → early arrival (before default_in) + late departure (after default_out)
+ *
+ * Returns rounded hours (half-up to nearest integer).
+ */
 export const calculateTimeBasedExtra = (
     outTimeStr: string,
     defaultOutTimeStr: string,
     inTimeStr?: string,
-    defaultInTimeStr?: string
+    defaultInTimeStr?: string,
+    dayType: DayType = 'weekday'
 ): number => {
-    const toMinutes = (t: string) => {
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-    };
+    if (!outTimeStr) return 0;
 
-    let extraMinutes = 0;
+    const actualOut = toMinutes(outTimeStr);
+    const actualIn  = inTimeStr ? toMinutes(inTimeStr) : toMinutes(defaultInTimeStr || '08:30');
 
-    // Late departure OT: actual_out - default_out (e.g. 18:00 - 17:00 = 60 min)
+    if (dayType === 'sunday_poya') {
+        // Entire shift is OT
+        const total = actualOut - actualIn;
+        return total > 0 ? Math.round(total / 60) : 0;
+    }
+
+    if (dayType === 'saturday') {
+        const defaultIn  = toMinutes(defaultInTimeStr || '08:30');
+        const satCutoff  = toMinutes(SAT_OT_START); // 12:00
+        let extra = 0;
+        // Early arrival before 08:30
+        if (inTimeStr && actualIn < defaultIn) extra += defaultIn - actualIn;
+        // Work after 12:00
+        if (actualOut > satCutoff) extra += actualOut - satCutoff;
+        return extra > 0 ? Math.round(extra / 60) : 0;
+    }
+
+    // Weekday
+    let extra = 0;
     if (outTimeStr && defaultOutTimeStr) {
-        const diff = toMinutes(outTimeStr) - toMinutes(defaultOutTimeStr);
-        if (diff > 0) extraMinutes += diff;
+        const diff = actualOut - toMinutes(defaultOutTimeStr);
+        if (diff > 0) extra += diff;
     }
-
-    // Early arrival OT: default_in - actual_in (e.g. 08:30 - 07:30 = 60 min)
     if (inTimeStr && defaultInTimeStr) {
-        const diff = toMinutes(defaultInTimeStr) - toMinutes(inTimeStr);
-        if (diff > 0) extraMinutes += diff;
+        const diff = toMinutes(defaultInTimeStr) - actualIn;
+        if (diff > 0) extra += diff;
     }
-
-    if (extraMinutes <= 0) return 0;
-
-    // Round half-up to nearest integer hour
-    return Math.round(extraMinutes / 60);
+    return extra > 0 ? Math.round(extra / 60) : 0;
 };
 
 export const calculateTimeBasedPayment = (extraHours: number, basicSalary: number): { payment: number, rate: number } => {

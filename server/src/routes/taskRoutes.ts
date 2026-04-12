@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTasks, createTask, updateTask, bulkSaveTasks, getTaskSummary, getTargetBaseReport, getOTAnalysisReport, getDailyCountReport } from '../controllers/taskController';
+import { getTasks, createTask, updateTask, deleteTask, bulkSaveTasks, getTaskSummary, getTargetBaseReport, getOTAnalysisReport, getDailyCountReport } from '../controllers/taskController';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -16,5 +16,6 @@ router.post('/', requireRole(['admin', 'supervisor']), createTask);
 router.post('/', requireRole(['admin', 'supervisor']), createTask);
 router.patch('/bulk-save', requireRole(['admin', 'supervisor']), bulkSaveTasks);
 router.patch('/:id', requireRole(['admin', 'supervisor']), updateTask);
+router.delete('/:id', requireRole(['admin', 'supervisor']), deleteTask);
 
 export default router;
