@@ -3,21 +3,15 @@ import { execute } from '../db/dbUtils';
 import { hashPassword } from '../utils/authUtils';
 
 export const getUsers = async (req: Request, res: Response) => {
-    const { site, role, status, search } = req.query;
+    const { site, role, status, search, date } = req.query;
     const userRole = (req as any).user.role;
-    const userSiteId = (req as any).user.site_id; // Assuming linked in token or we fetch
+    const userSiteId = (req as any).user.site_id;
 
     try {
         let query = `SELECT id, epf_number, name, role, status, site_id, inactivation_requested, basic_salary, ot_percentage, fix_salary, created_at FROM users WHERE 1=1`;
         const params: any = {};
 
-        // Supervisor Restriction: Can only see users in their site (or sites they supervise - need logic)
-        // Usually supervisor is assigned to a site. If user.site_id is their "operating site".
-        // Or if we check sites table for sites where supervisor_id = user.id.
-        // Let's assume for now we look up sites where they are supervisor.
-
         if (userRole === 'supervisor') {
-            // Find sites supervised by this user
             const sitesResult = await execute<any>(`SELECT id FROM sites WHERE supervisor_id = :id`, [String((req as any).user.id)]);
             const supervisedSiteIds = sitesResult.rows?.map((r: any) => r.ID) || [];
 
@@ -28,12 +22,10 @@ export const getUsers = async (req: Request, res: Response) => {
                 return res.json([]);
             }
         } else if (userRole === 'staff') {
-            // Staff can only see users in their own site
             if (userSiteId) {
                 query += ` AND site_id = :site_id_filter`;
                 params.site_id_filter = userSiteId;
             } else {
-                // specific case: staff without site_id (shouldn't happen ideally but handle safely)
                 return res.json([]);
             }
         }
@@ -45,14 +37,10 @@ export const getUsers = async (req: Request, res: Response) => {
         if (role) {
             const roleStr = String(role);
             if (roleStr.includes(',')) {
-                // Multiple roles
                 const roles = roleStr.split(',').map(r => r.trim());
-                // Create placeholders :role0, :role1, etc.
                 const rolePlaceholders = roles.map((_, i) => `:role${i}`).join(', ');
                 query += ` AND role IN (${rolePlaceholders})`;
-                roles.forEach((r, i) => {
-                    params[`role${i}`] = r;
-                });
+                roles.forEach((r, i) => { params[`role${i}`] = r; });
             } else {
                 query += ` AND role = :role`;
                 params.role = role;
@@ -68,7 +56,33 @@ export const getUsers = async (req: Request, res: Response) => {
         }
 
         const result = await execute<any>(query, params);
-        res.json(result.rows || []);
+        let users = (result.rows || []).map((u: any) => ({ ...u, IS_TEMP: 0 }));
+
+        // When fetching for a specific site + date, also include temp-assigned staff active on that date.
+        // These staff are helpers from another site — mark them IS_TEMP: 1 so frontend can badge them.
+        if (site && date) {
+            const tempResult = await execute<any>(
+                `SELECT u.id, u.epf_number, u.name, u.role, u.status, u.site_id,
+                        u.inactivation_requested, u.basic_salary, u.ot_percentage, u.fix_salary, u.created_at
+                 FROM temporary_assignments ta
+                 JOIN users u ON ta.staff_id = u.id
+                 WHERE ta.site_id = :site_id
+                   AND TO_DATE(:date_val, 'YYYY-MM-DD') BETWEEN ta.start_date AND ta.end_date
+                   AND u.status = 'active'`,
+                { site_id: Number(site), date_val: String(date) }
+            );
+            const tempStaff = (tempResult.rows || []).map((u: any) => ({ ...u, IS_TEMP: 1 }));
+
+            // Merge: avoid duplicates (permanent staff already in list stay as IS_TEMP: 0)
+            const existingIds = new Set(users.map((u: any) => u.ID));
+            for (const ts of tempStaff) {
+                if (!existingIds.has(ts.ID)) {
+                    users.push(ts);
+                }
+            }
+        }
+
+        res.json(users);
     } catch (err) {
         console.error('getUsers error:', err);
         res.status(500).json({ message: 'Server error' });

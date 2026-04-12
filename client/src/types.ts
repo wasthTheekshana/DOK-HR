@@ -6,6 +6,7 @@ export interface User {
     STATUS: 'active' | 'inactive';
     SITE_ID: number | null;
     INACTIVATION_REQUESTED?: number; // 0 or 1
+    IS_TEMP?: number; // 1 = temporarily assigned to this site, not permanent
     BASIC_SALARY?: number;
     OT_PERCENTAGE?: number;
     FIX_SALARY?: number;
@@ -66,6 +67,7 @@ export interface Attendance {
     OUT_TIME: string | null;
     STAFF_NAME?: string;
     SITE_NO?: string;
+    OT_TYPE?: string;
 }
 
 export interface LoginResponse {
