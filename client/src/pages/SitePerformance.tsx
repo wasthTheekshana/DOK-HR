@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Navigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import type { Site } from '../types';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import {
@@ -29,7 +31,7 @@ const MetricCard: React.FC<{
 );
 
 const ChartCard: React.FC<{ title: string; children: React.ReactNode; className?: string }> = ({ title, children, className = '' }) => (
-    <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm p-5 ${className}`}>
+    <div className={`card p-5 ${className}`}>
         <h3 className="text-sm font-bold text-slate-700 mb-4">{title}</h3>
         {children}
     </div>
@@ -59,6 +61,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 const SitePerformance: React.FC = () => {
+    const { role } = useAuth();
     const defaultFrom = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
     const defaultTo = format(new Date(), 'yyyy-MM-dd');
 
@@ -68,6 +71,8 @@ const SitePerformance: React.FC = () => {
     const [dateTo, setDateTo] = useState(defaultTo);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+
+    if (role !== 'system_admin') return <Navigate to="/" replace />;
 
     // Load target-based sites
     useEffect(() => {
@@ -112,7 +117,7 @@ const SitePerformance: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <div className="card p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
@@ -151,7 +156,7 @@ const SitePerformance: React.FC = () => {
 
             {/* No site selected */}
             {!selectedSiteId && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 text-center">
+                <div className="card py-16 text-center">
                     <MapPin className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                     <p className="text-base font-semibold text-slate-900 mb-1">Select a site to begin</p>
                     <p className="text-sm text-slate-500">Choose a target-based site from the dropdown above</p>
@@ -302,7 +307,7 @@ const SitePerformance: React.FC = () => {
                     </div>
 
                     {/* Full Staff Breakdown Table */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="card overflow-hidden">
                         <div className="px-5 py-4 border-b border-slate-100">
                             <h3 className="text-sm font-bold text-slate-700">Full Staff Breakdown</h3>
                         </div>
@@ -398,7 +403,7 @@ const SitePerformance: React.FC = () => {
 
             {/* No data state */}
             {!loading && data && data.staffBreakdown.length === 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 text-center">
+                <div className="card py-16 text-center">
                     <Target className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                     <p className="text-base font-semibold text-slate-900 mb-1">No target-based tasks found</p>
                     <p className="text-sm text-slate-500">There are no target-based tasks for this site in the selected period</p>

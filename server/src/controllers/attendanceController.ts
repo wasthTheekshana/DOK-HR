@@ -1,30 +1,27 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
 
-// Note: Using 'attendance' table as requested, though 'tasks' also has in/out.
-// If redundancy is confusing, we assume this is purely for gate logs.
 export const getAttendance = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to } = req.query;
     const userRole = (req as any).user.role;
     const userId = (req as any).user.id;
 
     try {
-        // Querying from tasks table instead of attendance
-        // Aliasing task_date as attendance_date to match frontend expectation
         let query = `
-        SELECT t.id, t.site_id, t.staff_id, t.task_date as attendance_date, t.in_time, t.out_time, 
-               u.name as staff_name, s.site_no 
-        FROM tasks t
-        JOIN sites s ON t.site_id = s.id
-        JOIN users u ON t.staff_id = u.id
+        SELECT a.id, a.site_id, a.staff_id, a.attendance_date, a.in_time, a.out_time,
+               u.name as staff_name, s.site_no, s.name as site_name
+        FROM attendance a
+        JOIN sites s ON a.site_id = s.id
+        JOIN users u ON a.staff_id = u.id
         WHERE 1=1
       `;
         const params: any = {};
 
         if (userRole === 'supervisor') {
-            // Filter by sites where supervisor_id matches current user
-            // We can resolve this by joining sites table on supervisor_id, but here 's' is already joined
             query += ` AND s.supervisor_id = :userId`;
+            params.userId = userId;
+        } else if (userRole === 'staff') {
+            query += ` AND a.staff_id = :userId`;
             params.userId = userId;
         }
 
@@ -33,16 +30,15 @@ export const getAttendance = async (req: Request, res: Response) => {
             params.site_no = String(site_no);
         }
         if (date_from) {
-            query += ` AND t.task_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
             params.date_from = String(date_from);
         }
         if (date_to) {
-            query += ` AND t.task_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
             params.date_to = String(date_to);
         }
 
-        // Ordering by date desc
-        query += ` ORDER BY t.task_date DESC`;
+        query += ` ORDER BY a.attendance_date DESC`;
 
         const result = await execute<any>(query, params);
         res.json(result.rows || []);
@@ -53,8 +49,6 @@ export const getAttendance = async (req: Request, res: Response) => {
 };
 
 export const createAttendance = async (req: Request, res: Response) => {
-    // Keeping this for now, but note that reports are now driven by tasks table.
-    // This might be deprecated if 'attendance' table is fully obsolete.
     const { site_id, staff_id, attendance_date, in_time, out_time } = req.body;
     try {
         await execute(
@@ -72,12 +66,13 @@ export const createAttendance = async (req: Request, res: Response) => {
 export const getAttendanceReport = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to } = req.query;
     try {
-        // Count distinct task_dates to get working days count
         let query = `
-        SELECT u.name as staff_name, COUNT(DISTINCT t.task_date) as days_count, u.epf_number
-        FROM tasks t
-        JOIN sites s ON t.site_id = s.id
-        JOIN users u ON t.staff_id = u.id
+        SELECT u.name as staff_name,
+               COUNT(DISTINCT TRUNC(a.attendance_date)) as days_count,
+               u.epf_number
+        FROM attendance a
+        JOIN sites s ON a.site_id = s.id
+        JOIN users u ON a.staff_id = u.id
         WHERE 1=1
       `;
         const params: any = {};
@@ -87,11 +82,11 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
             params.site_no = String(site_no);
         }
         if (date_from) {
-            query += ` AND t.task_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
             params.date_from = String(date_from);
         }
         if (date_to) {
-            query += ` AND t.task_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
             params.date_to = String(date_to);
         }
 

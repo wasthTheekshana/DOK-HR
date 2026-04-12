@@ -2,14 +2,21 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Eye, EyeOff, LogIn, AlertCircle, Building2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+
+const FEATURES = [
+    { title: 'Multi-site Operations',  desc: 'Manage teams across all your locations from one dashboard.' },
+    { title: 'Smart Payroll Engine',   desc: 'Automated OT calculations, poya days, and salary processing.' },
+    { title: 'Task & Attendance',      desc: 'Daily task sheets, time tracking, and attendance records.' },
+    { title: 'Invoice & Analytics',    desc: 'Generate invoices and monitor site performance in real time.' },
+];
 
 const Login: React.FC = () => {
-    const [epfNumber, setEpfNumber] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [epfNumber, setEpfNumber]   = useState('');
+    const [password, setPassword]     = useState('');
+    const [showPwd, setShowPwd]       = useState(false);
+    const [error, setError]           = useState('');
+    const [loading, setLoading]       = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -18,8 +25,8 @@ const Login: React.FC = () => {
         setError('');
         setLoading(true);
         try {
-            const response = await api.post('/auth/login', { epf_number: epfNumber, password });
-            login(response.data);
+            const res = await api.post('/auth/login', { epf_number: epfNumber, password });
+            login(res.data);
             navigate('/');
         } catch (err: any) {
             setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
@@ -28,121 +35,152 @@ const Login: React.FC = () => {
         }
     };
 
-    const features = [
-        { label: 'Multi-site Management' },
-        { label: 'Team & Role Control' },
-        { label: 'Daily Task Tracking' },
-        { label: 'Payroll Calculation' },
-        { label: 'Reports & Analytics' },
-    ];
-
     return (
         <div className="min-h-screen flex bg-slate-50">
-            <div className="hidden lg:flex lg:w-[45%] bg-gradient-to-br from-indigo-950 via-indigo-900 to-blue-900 relative overflow-hidden flex-col items-center justify-center p-12">
+
+            {/* ── Left brand panel ── */}
+            <div className="hidden lg:flex lg:w-[44%] relative flex-col overflow-hidden bg-[#0f172a]">
+                {/* Background blobs */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/5 rounded-full"></div>
-                    <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-white/5 rounded-full"></div>
-                    <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+                    <div className="absolute -top-32 -right-32 w-[480px] h-[480px] bg-indigo-600/10 rounded-full blur-3xl" />
+                    <div className="absolute -bottom-24 -left-24 w-[360px] h-[360px] bg-purple-600/10 rounded-full blur-3xl" />
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-indigo-500/5 rounded-full blur-2xl" />
+                    {/* Grid overlay */}
+                    <div className="absolute inset-0 opacity-[0.03]"
+                        style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
                 </div>
-                <div className="relative z-10 text-center">
-                    <div className="w-20 h-20 bg-white/10 backdrop-blur-sm rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl border border-white/20">
-                        <Building2 className="w-10 h-10 text-white" />
+
+                <div className="relative z-10 flex flex-col h-full p-12">
+                    {/* Logo */}
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/50">
+                            <span className="text-white font-black text-base">D</span>
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-[15px] leading-tight">DOK Systems</p>
+                            <p className="text-slate-500 text-[11px] font-medium">HR Platform</p>
+                        </div>
                     </div>
-                    <h1 className="text-4xl font-black text-white tracking-tight mb-3">DOK Systems</h1>
-                    <p className="text-indigo-200 text-lg font-medium mb-12">Human Resources Platform</p>
-                    <div className="space-y-4 text-left max-w-xs mx-auto">
-                        {features.map((item, i) => (
-                            <div key={i} className="flex items-center space-x-3 text-indigo-100">
-                                <div className="w-5 h-5 rounded-full bg-indigo-400/30 flex items-center justify-center">
-                                    <div className="w-2 h-2 rounded-full bg-indigo-300"></div>
+
+                    {/* Hero text */}
+                    <div className="mt-auto mb-10">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full mb-6">
+                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                            <span className="text-indigo-300 text-[11px] font-semibold tracking-wide">Human Resources Management</span>
+                        </div>
+                        <h1 className="text-[38px] font-black text-white leading-[1.1] tracking-tight">
+                            Manage your<br />
+                            <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                                workforce
+                            </span>
+                            <br />with confidence.
+                        </h1>
+                        <p className="text-slate-400 text-[14px] mt-5 leading-relaxed max-w-[340px]">
+                            A complete HR operations suite built for multi-site companies — from task tracking to payroll automation.
+                        </p>
+                    </div>
+
+                    {/* Features */}
+                    <div className="space-y-3">
+                        {FEATURES.map((f, i) => (
+                            <div key={i} className="flex items-start gap-3 p-3.5 bg-white/[0.03] border border-white/[0.06] rounded-xl hover:bg-white/[0.05] transition-colors">
+                                <div className="w-6 h-6 bg-indigo-500/20 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
                                 </div>
-                                <span className="font-medium text-sm">{item.label}</span>
+                                <div>
+                                    <p className="text-white text-[12.5px] font-semibold leading-tight">{f.title}</p>
+                                    <p className="text-slate-500 text-[11.5px] mt-0.5 leading-snug">{f.desc}</p>
+                                </div>
                             </div>
                         ))}
                     </div>
+
+                    <p className="mt-8 text-slate-600 text-[11px]">© 2025 DOK Systems · All rights reserved</p>
                 </div>
-                <p className="relative z-10 mt-auto text-indigo-300/50 text-xs">2025 DOK Systems. All rights reserved</p>
             </div>
 
-            <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
-                <div className="w-full max-w-md">
-                    <div className="lg:hidden flex items-center space-x-3 mb-10">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <Building2 className="w-5 h-5 text-white" />
+            {/* ── Right form panel ── */}
+            <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-white">
+                <div className="w-full max-w-[400px]">
+
+                    {/* Mobile logo */}
+                    <div className="lg:hidden flex items-center gap-2.5 mb-10">
+                        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                            <span className="text-white font-black text-base">D</span>
                         </div>
                         <div>
-                            <p className="font-black text-slate-900 text-lg leading-none">DOK Systems</p>
-                            <p className="text-slate-500 text-xs">HR Platform</p>
+                            <p className="font-black text-slate-900 text-[15px] leading-tight">DOK Systems</p>
+                            <p className="text-slate-400 text-[11px]">HR Platform</p>
                         </div>
                     </div>
 
+                    {/* Heading */}
                     <div className="mb-8">
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Welcome back</h2>
-                        <p className="text-slate-500 mt-2">Sign in to your account to continue</p>
+                        <h2 className="text-[26px] font-black text-slate-900 tracking-tight leading-tight">Welcome back</h2>
+                        <p className="text-slate-400 text-[13.5px] mt-1.5">Sign in to your account to continue</p>
                     </div>
 
+                    {/* Error */}
                     {error && (
-                        <div className="flex items-start space-x-3 p-4 bg-red-50 border border-red-200 rounded-2xl mb-6">
-                            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-700 font-medium">{error}</p>
+                        <div className="flex items-start gap-3 p-3.5 bg-red-50 border border-red-100 rounded-xl mb-5">
+                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                            <p className="text-[13px] text-red-700 font-medium leading-snug">{error}</p>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">EPF Number</label>
+                            <label className="form-label">EPF Number</label>
                             <input
                                 type="text"
                                 required
                                 autoFocus
                                 value={epfNumber}
-                                onChange={(e) => setEpfNumber(e.target.value)}
-                                className="w-full px-4 py-3.5 bg-white border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors font-medium"
+                                onChange={e => setEpfNumber(e.target.value)}
+                                className="form-input"
                                 placeholder="e.g. ADMIN001"
+                                style={{ padding: '11px 14px', fontSize: '14px' }}
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">Password</label>
+                            <label className="form-label">Password</label>
                             <div className="relative">
                                 <input
-                                    type={showPassword ? 'text' : 'password'}
+                                    type={showPwd ? 'text' : 'password'}
                                     required
                                     value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3.5 bg-white border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors font-medium pr-12"
+                                    onChange={e => setPassword(e.target.value)}
+                                    className="form-input pr-11"
                                     placeholder="Enter your password"
+                                    style={{ padding: '11px 44px 11px 14px', fontSize: '14px' }}
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                                    tabIndex={-1}
-                                >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                <button type="button" onClick={() => setShowPwd(v => !v)} tabIndex={-1}
+                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                    {showPwd ? <EyeOff className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} /> : <Eye className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />}
                                 </button>
                             </div>
                         </div>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full flex items-center justify-center space-x-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-500/25 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-                        >
+
+                        <button type="submit" disabled={loading}
+                            className="btn btn-primary w-full mt-2"
+                            style={{ padding: '12px 20px', fontSize: '14px', borderRadius: 12, marginTop: 8 }}>
                             {loading ? (
                                 <>
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                    <span>Signing in...</span>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    Signing in…
                                 </>
                             ) : (
                                 <>
-                                    <LogIn className="w-5 h-5" />
-                                    <span>Sign In</span>
+                                    Sign In
+                                    <ArrowRight className="w-4 h-4 ml-0.5" />
                                 </>
                             )}
                         </button>
                     </form>
 
-                    <p className="text-center text-xs text-slate-400 mt-8">
-                        Contact your administrator if you have trouble signing in
+                    <p className="text-center text-[12px] text-slate-400 mt-8 leading-relaxed">
+                        Having trouble? Contact your administrator<br />for account assistance.
                     </p>
                 </div>
             </div>

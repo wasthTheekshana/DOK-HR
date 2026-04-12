@@ -367,7 +367,7 @@ const Reports: React.FC = () => {
             {/* Daily Count Report */}
             {activeTab === 'daily_count' && (
                 <div className="space-y-5">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="card p-5">
                         <div className="flex flex-col sm:flex-row gap-4 items-end">
                             <div className="flex-1">
                                 <FilterLabel>Site</FilterLabel>
@@ -380,7 +380,7 @@ const Reports: React.FC = () => {
                             <ExportButtons onPDF={exportPDF} onExcel={exportExcel} disabled={reportData.length === 0} />
                         </div>
                     </div>
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="card overflow-hidden">
                         {loading ? <LoadingState /> : reportData.length === 0 ? <EmptyState /> : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-slate-100">
@@ -422,7 +422,7 @@ const Reports: React.FC = () => {
             {/* Target Base Report */}
             {activeTab === 'salary' && (
                 <div className="space-y-5">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="card p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                             <div>
                                 <FilterLabel>Site</FilterLabel>
@@ -439,7 +439,7 @@ const Reports: React.FC = () => {
                             <ExportButtons onPDF={exportTargetPDF} onExcel={exportTargetExcel} disabled={targetReportData.length === 0} />
                         </div>
                     </div>
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="card overflow-hidden">
                         {targetLoading ? <LoadingState /> : targetReportData.length === 0 ? <EmptyState /> : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-slate-100">
@@ -476,7 +476,7 @@ const Reports: React.FC = () => {
             {/* OT Analysis Report */}
             {activeTab === 'ot_analysis' && (
                 <div className="space-y-5">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="card p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                             <div>
                                 <FilterLabel>Site</FilterLabel>
@@ -542,7 +542,7 @@ const Reports: React.FC = () => {
                         );
                     })()}
 
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="card overflow-hidden">
                         {otLoading ? <LoadingState /> : otReportData.length === 0 ? <EmptyState /> : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-slate-100">
@@ -627,7 +627,7 @@ const Reports: React.FC = () => {
             {/* Custom OT % Report */}
             {activeTab === 'custom_ot' && (
                 <div className="space-y-5">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <div className="card p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                             <div>
                                 <FilterLabel>Site</FilterLabel>
@@ -677,7 +677,7 @@ const Reports: React.FC = () => {
                             )}
                         </div>
                     </div>
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="card overflow-hidden">
                         {customOtLoading ? <LoadingState /> : customOtData.length === 0 ? (
                             <div className="py-16 text-center">
                                 <Calculator className="w-12 h-12 text-slate-200 mx-auto mb-3" />
@@ -734,7 +734,7 @@ const Reports: React.FC = () => {
 
                     {/* OT History Panel */}
                     {showOTHistory && (
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="card overflow-hidden">
                             <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex flex-wrap items-end gap-3">
                                 <div>
                                     <FilterLabel>History From</FilterLabel>

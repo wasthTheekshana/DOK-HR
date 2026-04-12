@@ -120,10 +120,10 @@ export const previewInvoice = async (req: Request, res: Response) => {
              ORDER BY stt.task_name`,
             { site_id: Number(site_id), date_from, date_to }
         );
-        // time_based and staff_outsource: count task rows; target_based: sum count column
-        const useRowCount = site.OT_TYPE === 'time_based' || isStaffOutsource;
+        // staff_outsource: count task rows (headcount per task)
+        // time_based and target_based: sum the count column (actual units done)
         const taskLines = (taskResult.rows || []).map((row: any) => {
-            const totalCount = useRowCount
+            const totalCount = isStaffOutsource
                 ? Number(row.ROW_COUNT || 0)
                 : Number(row.SUM_COUNT || 0);
             const unitPrice  = Number(row.UNIT_PRICE || 0);
