@@ -478,50 +478,55 @@ const Dashboard: React.FC = () => {
                                 </div>
 
                                 {/* Target vs Performance — three columns */}
-                                {currentSlide.total_target > 0 ? (
-                                    <div className={`rounded-2xl p-5 border ${achBg(currentSlide.achievement_pct)} mb-4`}>
+                                {(() => {
+                                    const slideTarget = (currentSlide.daily_target || 0) * 22 * (currentSlide.active_workers || 0);
+                                    const slideAchievement = slideTarget > 0 ? Math.round(currentSlide.total_units / slideTarget * 1000) / 10 : null;
+                                    const slideExtra = currentSlide.total_units > slideTarget ? currentSlide.total_units - slideTarget : 0;
+                                    return slideTarget > 0 ? (
+                                    <div className={`rounded-2xl p-5 border ${achBg(slideAchievement)} mb-4`}>
                                         <div className="grid grid-cols-3 gap-4 items-center">
                                             <div className="text-center">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Actual Units</p>
-                                                <p className={`text-[38px] font-black leading-none ${achColor(currentSlide.achievement_pct)}`}>
+                                                <p className={`text-[38px] font-black leading-none ${achColor(slideAchievement)}`}>
                                                     {Number(currentSlide.total_units || 0).toLocaleString()}
                                                 </p>
                                                 <p className="text-[11px] text-slate-400 mt-1">produced</p>
                                             </div>
                                             <div className="text-center border-x border-slate-200 px-4">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Achievement</p>
-                                                <p className={`text-[44px] font-black leading-none ${achColor(currentSlide.achievement_pct)}`}>
-                                                    {currentSlide.achievement_pct}%
+                                                <p className={`text-[44px] font-black leading-none ${achColor(slideAchievement)}`}>
+                                                    {slideAchievement}%
                                                 </p>
                                                 <div className="mt-2 h-2 bg-white/80 border border-slate-200 rounded-full overflow-hidden">
-                                                    <div className={`h-full rounded-full transition-all duration-700 ${achBar(currentSlide.achievement_pct)}`}
-                                                        style={{ width: `${Math.min(Number(currentSlide.achievement_pct || 0), 100)}%` }} />
+                                                    <div className={`h-full rounded-full transition-all duration-700 ${achBar(slideAchievement)}`}
+                                                        style={{ width: `${Math.min(Number(slideAchievement || 0), 100)}%` }} />
                                                 </div>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Target Units</p>
                                                 <p className="text-[38px] font-black text-slate-500 leading-none">
-                                                    {Number(currentSlide.total_target || 0).toLocaleString()}
+                                                    {slideTarget.toLocaleString()}
                                                 </p>
                                                 <p className="text-[11px] text-slate-400 mt-1">daily × 22 × staff</p>
                                             </div>
                                         </div>
-                                        {(currentSlide.extra_units || 0) > 0 && (
+                                        {slideExtra > 0 && (
                                             <div className="mt-3 pt-3 border-t border-white/50 flex items-center justify-between">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Extra Units</p>
                                                 <p className="text-[20px] font-black text-emerald-600 leading-none">
-                                                    +{Number(currentSlide.extra_units).toLocaleString()}
+                                                    +{slideExtra.toLocaleString()}
                                                 </p>
                                             </div>
                                         )}
                                     </div>
-                                ) : (
-                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-4">
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Period Activity</p>
-                                        <p className="text-[42px] font-black text-slate-700 leading-none">{Number(currentSlide.task_records || 0).toLocaleString()}</p>
-                                        <p className="text-[12px] text-slate-400 mt-1.5">Task records (time-based site)</p>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-4">
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Period Activity</p>
+                                            <p className="text-[42px] font-black text-slate-700 leading-none">{Number(currentSlide.task_records || 0).toLocaleString()}</p>
+                                            <p className="text-[12px] text-slate-400 mt-1.5">Task records (time-based site)</p>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Site KPIs */}
                                 <div className="grid grid-cols-4 gap-3">
