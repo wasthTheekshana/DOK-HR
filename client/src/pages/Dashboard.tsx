@@ -585,29 +585,51 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4">ALL SITES &mdash; TARGET vs ACHIEVEMENT</h3>
                             {bizLoading ? (
                                 <div className="skeleton h-44 rounded-xl" />
-                            ) : sitesData.filter((s: any) => s.achievement_pct !== null).length === 0 ? (
-                                <div className="flex items-center justify-center h-44 text-slate-400 text-xs">No target-based data for this period</div>
+                            ) : sitesData.filter((s: any) => s.total_target > 0).length === 0 ? (
+                                <div className="flex items-center justify-center h-44 text-slate-400 text-xs">No sites with daily targets configured</div>
                             ) : (
-                                <ResponsiveContainer width="100%" height={160}>
+                                <ResponsiveContainer width="100%" height={180}>
                                     <BarChart
                                         data={[...sitesData]
-                                            .filter((s: any) => s.achievement_pct !== null)
-                                            .slice(0, 12)
-                                            .map((s: any) => ({ name: s.site_no, achievement: s.achievement_pct }))}
-                                        barSize={18}
+                                            .filter((s: any) => s.total_target > 0)
+                                            .map((s: any) => ({
+                                                name:        s.site_no,
+                                                site_name:   s.site_name,
+                                                target:      s.total_target,
+                                                actual:      s.total_units,
+                                                achievement: s.achievement_pct,
+                                            }))}
+                                        barCategoryGap="30%"
+                                        barGap={2}
                                         margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
-                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v: number) => `${v}%`} domain={[0, 120]} />
+                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
                                         <Tooltip
-                                            formatter={(val: unknown) => [`${val}%`, 'Achievement']}
-                                            contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                                        <Bar dataKey="achievement" name="Achievement" radius={[4, 4, 0, 0]}>
+                                            content={({ active, payload, label }: any) => {
+                                                if (!active || !payload?.length) return null;
+                                                const d = payload[0]?.payload;
+                                                return (
+                                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
+                                                        <p style={{ fontWeight: 700, marginBottom: 4 }}>{d?.site_name || label}</p>
+                                                        <p style={{ color: '#6366f1' }}>Actual: {Number(d?.actual || 0).toLocaleString()}</p>
+                                                        <p style={{ color: '#94a3b8' }}>Target: {Number(d?.target || 0).toLocaleString()}</p>
+                                                        <p style={{ color: d?.achievement >= 100 ? '#10b981' : d?.achievement >= 80 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                                                            Achievement: {d?.achievement != null ? `${d.achievement}%` : 'N/A'}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }}
+                                        />
+                                        <Bar dataKey="target" name="Target" fill="#cbd5e1" radius={[3, 3, 0, 0]} barSize={14} />
+                                        <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]} barSize={14}>
                                             {[...sitesData]
-                                                .filter((s: any) => s.achievement_pct !== null)
-                                                .slice(0, 12)
+                                                .filter((s: any) => s.total_target > 0)
                                                 .map((s: any, i: number) => (
-                                                    <Cell key={i} fill={s.achievement_pct >= 100 ? '#10b981' : s.achievement_pct >= 80 ? '#f59e0b' : '#ef4444'} />
+                                                    <Cell
+                                                        key={i}
+                                                        fill={s.achievement_pct == null ? '#94a3b8' : s.achievement_pct >= 100 ? '#10b981' : s.achievement_pct >= 80 ? '#f59e0b' : '#ef4444'}
+                                                    />
                                                 ))}
                                         </Bar>
                                     </BarChart>
