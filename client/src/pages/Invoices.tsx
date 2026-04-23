@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import type { Site, InvoiceRecord, InvoicePreview } from '../types';
+import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -37,7 +37,8 @@ const Invoices: React.FC = () => {
     const [dateTo, setDateTo]               = useState('');
     const [calculating, setCalculating]     = useState(false);
     const [preview, setPreview]             = useState<InvoicePreview | null>(null);
-    const [expenseCost, setExpenseCost]     = useState('');
+    const [editedVariants,  setEditedVariants]  = useState<{ key: string; value: string }[]>([]);
+    const [additionalCosts, setAdditionalCosts] = useState<{ key: string; value: string }[]>([]);
     const [saving, setSaving]               = useState(false);
 
     // ── Edit modal ──
@@ -63,7 +64,8 @@ const Invoices: React.FC = () => {
     // ── Generate modal handlers ──
     const openModal = () => {
         setSelectedSiteId(''); setDateFrom(''); setDateTo('');
-        setPreview(null); setExpenseCost('');
+        setPreview(null);
+        setEditedVariants([]); setAdditionalCosts([]);
         setIsModalOpen(true);
     };
 
@@ -73,22 +75,41 @@ const Invoices: React.FC = () => {
         setCalculating(true); setPreview(null);
         try {
             const r = await api.post('/invoices/preview', { site_id: Number(selectedSiteId), date_from: dateFrom, date_to: dateTo });
-            setPreview(r.data); setExpenseCost('');
+            const data = r.data;
+            setPreview(data);
+            setEditedVariants(
+                data.cost_factors.map((f: InvoiceCostFactor) => ({
+                    key:   f.key,
+                    value: f.numeric ? String(f.amount) : f.value,
+                }))
+            );
+            setAdditionalCosts([]);
         } catch (err: any) { alert(err.response?.data?.message || 'Calculation failed'); }
         finally { setCalculating(false); }
     };
 
     const handleSave = async () => {
         if (!preview) return;
+        for (const row of additionalCosts) {
+            if (!row.key.trim()) { alert('Each additional cost must have a name.'); return; }
+            const n = parseFloat(row.value);
+            if (isNaN(n) || n < 0) { alert('Each additional cost must have a valid amount (≥ 0).'); return; }
+        }
         setSaving(true);
         try {
+            const allVariants = [
+                ...editedVariants,
+                ...additionalCosts.map(r => ({ key: r.key.trim(), value: r.value })),
+            ];
             await api.post('/invoices', {
-                site_id: preview.site.ID, site_no: preview.site.SITE_NO, site_name: preview.site.NAME,
-                date_from: preview.date_from, date_to: preview.date_to,
-                cost_variant_amount: preview.cost_variant_total,
+                site_id:          preview.site.ID,
+                site_no:          preview.site.SITE_NO,
+                site_name:        preview.site.NAME,
+                date_from:        preview.date_from,
+                date_to:          preview.date_to,
+                cost_variants:    allVariants,
                 salary_ot_amount: preview.salary_ot_amount,
-                expense_cost: expenseCost ? Number(expenseCost) : 0,
-                invoice_price: preview.total_invoice_price,
+                invoice_price:    preview.total_invoice_price,
             });
             setIsModalOpen(false); fetchInvoices();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to save invoice'); }
@@ -656,18 +677,13 @@ const Invoices: React.FC = () => {
 
                                     <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Additional Expense Cost (Rs.) — optional</label>
-                                            <input type="number" min="0" step="1" value={expenseCost}
-                                                onChange={e => setExpenseCost(e.target.value)}
-                                                onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
-                                                className="form-input w-full px-3.5 py-2.5"
-                                                placeholder="0" />
+                                            {/* TODO Task 6: replace with editable cost variants UI */}
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                                             {[
                                                 { label: 'Cost Variants', val: preview.cost_variant_total, color: 'text-amber-700' },
                                                 { label: 'Salary + OT',   val: preview.salary_ot_amount,  color: 'text-violet-700' },
-                                                { label: 'Expense',       val: expenseCost ? Number(expenseCost) : 0, color: 'text-slate-700' },
+                                                { label: 'Expense',       val: 0, color: 'text-slate-700' },
                                                 { label: 'Invoice Price', val: preview.total_invoice_price, color: 'text-emerald-700' },
                                             ].map(c => (
                                                 <div key={c.label} className="bg-slate-50 rounded-xl p-3 text-center">
