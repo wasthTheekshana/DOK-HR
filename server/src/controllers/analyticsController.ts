@@ -489,7 +489,7 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
             const totalUnits    = Number(task.TOTAL_UNITS)    || 0;
             const dailyTarget   = Number(r.DAILY_TARGET)      || 0;
             const activeWorkers = Number(task.ACTIVE_WORKERS) || 0;
-            const totalTarget   = dailyTarget * 22 * activeWorkers;
+            const totalTarget   = dailyTarget * workingDays;
             const extraUnits    = totalUnits > totalTarget ? totalUnits - totalTarget : 0;
             const timeOT = timeOTMap.get(siteNo) || 0;
             const targetOT = targetOTMap.get(siteNo) || 0;
