@@ -411,9 +411,12 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
     const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
     const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
-    const workingDays = computeWorkingDays(from, to);
 
     try {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+            return res.status(400).json({ message: 'Invalid date range' });
+        }
+        const workingDays = computeWorkingDays(from, to);
         const [siteBaseRes, siteTaskRes, siteAttendRes, timeOTRes, targetOTRes] = await Promise.all([
             // Site base info: staff counts + salary (no date filter)
             execute<any>(
