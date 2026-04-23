@@ -604,14 +604,12 @@ const Dashboard: React.FC = () => {
                                 <ResponsiveContainer width="100%" height={180}>
                                     <BarChart
                                         data={[...sitesData]
-                                            .filter((s: any) => s.total_target > 0)
-                                            .map((s: any) => ({
-                                                name:        s.site_no,
-                                                site_name:   s.site_name,
-                                                target:      s.total_target,
-                                                actual:      s.total_units,
-                                                achievement: s.achievement_pct,
-                                            }))}
+                                            .map((s: any) => {
+                                                const target = (s.daily_target || 0) * 22 * (s.active_workers || 0);
+                                                const achievement = target > 0 ? Math.round(s.total_units / target * 1000) / 10 : null;
+                                                return { name: s.site_no, site_name: s.site_name, target, actual: s.total_units, achievement };
+                                            })
+                                            .filter((s: any) => s.target > 0)}
                                         barCategoryGap="30%"
                                         barGap={2}
                                         margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -637,12 +635,13 @@ const Dashboard: React.FC = () => {
                                         <Bar dataKey="target" name="Target" fill="#cbd5e1" radius={[3, 3, 0, 0]} barSize={14} />
                                         <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]} barSize={14}>
                                             {[...sitesData]
-                                                .filter((s: any) => s.total_target > 0)
-                                                .map((s: any, i: number) => (
-                                                    <Cell
-                                                        key={i}
-                                                        fill={s.achievement_pct == null ? '#94a3b8' : s.achievement_pct >= 100 ? '#10b981' : s.achievement_pct >= 80 ? '#f59e0b' : '#ef4444'}
-                                                    />
+                                                .map((s: any) => {
+                                                    const target = (s.daily_target || 0) * 22 * (s.active_workers || 0);
+                                                    return target > 0 ? Math.round(s.total_units / target * 1000) / 10 : null;
+                                                })
+                                                .filter((pct: any) => pct !== null)
+                                                .map((pct: any, i: number) => (
+                                                    <Cell key={i} fill={pct >= 100 ? '#10b981' : pct >= 80 ? '#f59e0b' : '#ef4444'} />
                                                 ))}
                                         </Bar>
                                     </BarChart>
