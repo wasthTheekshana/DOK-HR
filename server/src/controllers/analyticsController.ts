@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
+import { computeWorkingDays } from '../utils/analyticsUtils';
 
 const EXTRA_UNIT_RATE = Number(process.env.EXTRA_UNIT_RATE) || 0.5;
 
@@ -410,19 +411,21 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
     const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
     const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const workingDays = computeWorkingDays(from, to);
 
     try {
         const [siteBaseRes, siteTaskRes, siteAttendRes, timeOTRes, targetOTRes] = await Promise.all([
             // Site base info: staff counts + salary (no date filter)
             execute<any>(
                 `SELECT s.id as site_id, s.name as site_name, s.site_no,
+                    s.daily_target,
                     COUNT(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.id END) as active_staff,
                     COUNT(CASE WHEN u.role = 'staff' THEN u.id END) as total_staff,
                     COUNT(CASE WHEN u.role = 'supervisor' THEN u.id END) as supervisor_count,
                     NVL(SUM(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.basic_salary END), 0) as total_salary
                  FROM sites s
                  LEFT JOIN users u ON u.site_id = s.id
-                 GROUP BY s.id, s.name, s.site_no
+                 GROUP BY s.id, s.name, s.site_no, s.daily_target
                  ORDER BY s.site_no`,
                 []
             ),
@@ -431,7 +434,6 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
                 `SELECT t.site_id,
                     COUNT(t.id) as task_records,
                     NVL(SUM(t.count), 0) as total_units,
-                    NVL(SUM(CASE WHEN t.ot_type = 'target_based' THEN t.target ELSE 0 END), 0) as total_target,
                     COUNT(DISTINCT t.staff_id) as active_workers
                  FROM tasks t
                  WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
@@ -481,14 +483,16 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
             const task = (taskMap.get(r.SITE_ID) as any) || {};
             const attend = (attendMap.get(r.SITE_ID) as any) || {};
             const siteNo = String(r.SITE_NO);
-            const totalUnits = Number(task.TOTAL_UNITS) || 0;
-            const totalTarget = Number(task.TOTAL_TARGET) || 0;
+            const totalUnits  = Number(task.TOTAL_UNITS) || 0;
+            const dailyTarget = Number(r.DAILY_TARGET)   || 0;
+            const totalTarget = dailyTarget * workingDays;
             const timeOT = timeOTMap.get(siteNo) || 0;
             const targetOT = targetOTMap.get(siteNo) || 0;
             return {
                 site_id: r.SITE_ID,
                 site_name: r.SITE_NAME,
                 site_no: r.SITE_NO,
+                daily_target: dailyTarget,
                 active_staff: Number(r.ACTIVE_STAFF) || 0,
                 total_staff: Number(r.TOTAL_STAFF) || 0,
                 supervisor_count: Number(r.SUPERVISOR_COUNT) || 0,
@@ -1217,11 +1221,12 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                 { sid }
             ),
 
-            // 2. Daily task records + unique workers + avg hours
+            // 2. Daily task records + unique workers + avg hours + total count
             execute<any>(
                 `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD') AS task_date,
                         COUNT(*)                            AS task_records,
                         COUNT(DISTINCT t.staff_id)          AS unique_workers,
+                        SUM(NVL(t.count, 0))                AS total_count,
                         ROUND(AVG(
                             CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
                             THEN (TO_NUMBER(SUBSTR(t.out_time,1,2)) + TO_NUMBER(SUBSTR(t.out_time,4,2))/60)
@@ -1230,7 +1235,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         ), 2) AS avg_hours
                  FROM tasks t
                  WHERE t.site_id = :sid
-                   AND t.ot_type = 'time_based'
+                   AND t.ot_type IN ('time_based', 'staff_outsource')
                    AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
                    AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM-DD')
@@ -1238,12 +1243,13 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                 { sid, d_from: from, d_to: to }
             ),
 
-            // 3. Per-staff: days worked, task records, avg hours
+            // 3. Per-staff: days worked, task records, avg hours, total count
             execute<any>(
                 `SELECT u.name          AS staff_name,
                         u.epf_number,
                         COUNT(DISTINCT t.task_date)                   AS days_worked,
                         COUNT(*)                                       AS task_records,
+                        SUM(NVL(t.count, 0))                          AS total_count,
                         COUNT(CASE WHEN t.in_time IS NOT NULL THEN 1 END) AS records_with_time,
                         ROUND(AVG(
                             CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
@@ -1253,7 +1259,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         ), 2) AS avg_hours
                  FROM tasks t JOIN users u ON t.staff_id = u.id
                  WHERE t.site_id = :sid
-                   AND t.ot_type = 'time_based'
+                   AND t.ot_type IN ('time_based', 'staff_outsource')
                    AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
                    AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
                  GROUP BY u.name, u.epf_number
@@ -1269,7 +1275,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         COUNT(DISTINCT t.task_date)     AS day_count
                  FROM tasks t
                  WHERE t.site_id = :sid
-                   AND t.ot_type = 'time_based'
+                   AND t.ot_type IN ('time_based', 'staff_outsource')
                    AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
                    AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
                  GROUP BY LOWER(TRIM(t.task_description))
@@ -1285,7 +1291,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         COUNT(DISTINCT t.task_date)      AS working_days
                  FROM tasks t
                  WHERE t.site_id = :sid
-                   AND t.ot_type = 'time_based'
+                   AND t.ot_type IN ('time_based', 'staff_outsource')
                    AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
                    AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM')
@@ -1327,6 +1333,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
             date:           r.TASK_DATE,
             task_records:   Number(r.TASK_RECORDS),
             unique_workers: Number(r.UNIQUE_WORKERS),
+            total_count:    Number(r.TOTAL_COUNT || 0),
             avg_hours:      r.AVG_HOURS !== null && r.AVG_HOURS !== undefined ? Number(r.AVG_HOURS) : null,
         }));
 
@@ -1335,6 +1342,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
             epf_number:        r.EPF_NUMBER || '—',
             days_worked:       Number(r.DAYS_WORKED),
             task_records:      Number(r.TASK_RECORDS),
+            total_count:       Number(r.TOTAL_COUNT || 0),
             records_with_time: Number(r.RECORDS_WITH_TIME || 0),
             avg_hours:         r.AVG_HOURS !== null && r.AVG_HOURS !== undefined ? Number(r.AVG_HOURS) : null,
         }));
