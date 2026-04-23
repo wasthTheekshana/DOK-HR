@@ -597,9 +597,12 @@ const Invoices: React.FC = () => {
                                                                         <input
                                                                             type="number" min="0" step="1"
                                                                             value={v.value}
-                                                                            onChange={e => setEditedVariants(prev =>
-                                                                                prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x)
-                                                                            )}
+                                                                            onChange={e => {
+                                                                                const val = e.target.value;
+                                                                                setEditedVariants(prev =>
+                                                                                    prev.map((x, j) => j === i ? { ...x, value: val } : x)
+                                                                                );
+                                                                            }}
                                                                             className="form-input w-full px-2 py-1 text-sm"
                                                                         />
                                                                     ) : (
