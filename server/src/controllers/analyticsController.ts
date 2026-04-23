@@ -697,7 +697,7 @@ export const getSitePerformanceAnalysis = async (req: Request, res: Response) =>
         }));
 
         const totalActual = staffRows.reduce((s: number, r: any) => s + r.sum_count, 0);
-        const totalTarget = (Number(siteInfo.DAILY_TARGET) || 0) * 22;
+        const totalTarget = staffRows.reduce((s: number, r: any) => s + r.total_target, 0);
         const totalExtra = staffRows.reduce((s: number, r: any) => s + r.extra_units, 0);
         const avgAchievement = staffRows.length > 0
             ? Math.round(staffRows.reduce((s: number, r: any) => s + r.achievement_pct, 0) / staffRows.length * 10) / 10
