@@ -318,6 +318,16 @@ const Invoices: React.FC = () => {
         XLSX.writeFile(wb, `Invoice_${inv.SITE_NO}_${inv.DATE_FROM}_${inv.DATE_TO}.xlsx`);
     };
 
+    const computedCostVariantTotal =
+        editedVariants.reduce((s, v) => {
+            const n = parseFloat(v.value);
+            return s + (isNaN(n) ? 0 : n);
+        }, 0) +
+        additionalCosts.reduce((s, v) => {
+            const n = parseFloat(v.value);
+            return s + (isNaN(n) ? 0 : n);
+        }, 0);
+
     const totalInvoiceValue = invoices.reduce((s, inv) => s + Number(inv.INVOICE_PRICE || 0), 0);
 
     if (loading) return (
@@ -577,17 +587,34 @@ const Invoices: React.FC = () => {
                                                         <th className="pb-2 text-right text-xs font-semibold text-slate-500">Amount</th>
                                                     </tr></thead>
                                                     <tbody className="divide-y divide-slate-50">
-                                                        {preview.cost_factors.map((f, i) => (
+                                                        {editedVariants.map((v, i) => (
                                                             <tr key={i}>
-                                                                <td className="py-2 text-slate-700 font-medium">{f.key}</td>
-                                                                <td className="py-2 text-slate-500">{f.value}</td>
-                                                                <td className="py-2 text-right font-semibold text-amber-700">{f.numeric ? fmt(f.amount) : '—'}</td>
+                                                                <td className="py-1.5 pr-2">
+                                                                    <span className="text-slate-700 font-medium">{v.key}</span>
+                                                                </td>
+                                                                <td className="py-1.5 pr-2">
+                                                                    {preview.cost_factors[i]?.numeric ? (
+                                                                        <input
+                                                                            type="number" min="0" step="1"
+                                                                            value={v.value}
+                                                                            onChange={e => setEditedVariants(prev =>
+                                                                                prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x)
+                                                                            )}
+                                                                            className="form-input w-full px-2 py-1 text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-slate-400 text-sm">{v.value}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-1.5 text-right font-semibold text-amber-700">
+                                                                    {preview.cost_factors[i]?.numeric ? fmt(parseFloat(v.value) || 0) : '—'}
+                                                                </td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                     <tfoot><tr className="border-t-2 border-amber-200">
                                                         <td colSpan={2} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Cost Variants</td>
-                                                        <td className="pt-2.5 text-right font-black text-amber-700">{fmt(preview.cost_variant_total)}</td>
+                                                        <td className="pt-2.5 text-right font-black text-amber-700">{fmt(computedCostVariantTotal)}</td>
                                                     </tr></tfoot>
                                                 </table>
                                             )}
