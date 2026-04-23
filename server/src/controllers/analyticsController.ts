@@ -486,9 +486,11 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
             const task = (taskMap.get(r.SITE_ID) as any) || {};
             const attend = (attendMap.get(r.SITE_ID) as any) || {};
             const siteNo = String(r.SITE_NO);
-            const totalUnits  = Number(task.TOTAL_UNITS) || 0;
-            const dailyTarget = Number(r.DAILY_TARGET)   || 0;
-            const totalTarget = dailyTarget * workingDays;
+            const totalUnits    = Number(task.TOTAL_UNITS)    || 0;
+            const dailyTarget   = Number(r.DAILY_TARGET)      || 0;
+            const activeWorkers = Number(task.ACTIVE_WORKERS) || 0;
+            const totalTarget   = dailyTarget * 22 * activeWorkers;
+            const extraUnits    = totalUnits > totalTarget ? totalUnits - totalTarget : 0;
             const timeOT = timeOTMap.get(siteNo) || 0;
             const targetOT = targetOTMap.get(siteNo) || 0;
             return {
@@ -503,10 +505,11 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
                 task_records: Number(task.TASK_RECORDS) || 0,
                 total_units: totalUnits,
                 total_target: totalTarget,
+                extra_units: extraUnits,
                 time_ot_payment: Math.round(timeOT * 100) / 100,
                 target_ot_payment: Math.round(targetOT * 100) / 100,
                 ot_payment: Math.round((timeOT + targetOT) * 100) / 100,
-                active_workers: Number(task.ACTIVE_WORKERS) || 0,
+                active_workers: activeWorkers,
                 attendance_count: Number(attend.ATTENDANCE_COUNT) || 0,
                 unique_attendees: Number(attend.UNIQUE_ATTENDEES) || 0,
                 achievement_pct: totalTarget > 0 ? Math.round(totalUnits / totalTarget * 1000) / 10 : null

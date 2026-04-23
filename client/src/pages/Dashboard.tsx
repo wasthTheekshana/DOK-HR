@@ -503,9 +503,17 @@ const Dashboard: React.FC = () => {
                                                 <p className="text-[38px] font-black text-slate-500 leading-none">
                                                     {Number(currentSlide.total_target || 0).toLocaleString()}
                                                 </p>
-                                                <p className="text-[11px] text-slate-400 mt-1">expected</p>
+                                                <p className="text-[11px] text-slate-400 mt-1">daily × 22 × staff</p>
                                             </div>
                                         </div>
+                                        {(currentSlide.extra_units || 0) > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-white/50 flex items-center justify-between">
+                                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Extra Units</p>
+                                                <p className="text-[20px] font-black text-emerald-600 leading-none">
+                                                    +{Number(currentSlide.extra_units).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-4">
