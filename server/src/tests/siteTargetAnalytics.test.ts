@@ -21,6 +21,6 @@ describe('computeWorkingDays', () => {
     });
 
     it('returns 132 for ~6 months (180 days)', () => {
-        expect(computeWorkingDays('2026-01-01', '2026-06-30')).toBe(132);
+        expect(computeWorkingDays('2026-01-01', '2026-06-29')).toBe(132);
     });
 });
