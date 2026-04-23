@@ -35,7 +35,7 @@ describe('site target mapping', () => {
         expect(pct).toBe(90);
     });
 
-    it('returns null achievement_pct when daily_target is 0', () => {
+    it('returns null achievement_pct when totalTarget is 0', () => {
         const totalUnits  = 500;
         const totalTarget = 0;
         const pct = totalTarget > 0 ? Math.round(totalUnits / totalTarget * 1000) / 10 : null;
