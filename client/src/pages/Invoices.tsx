@@ -623,6 +623,51 @@ const Invoices: React.FC = () => {
                                             )}
                                     </SectionCard>
 
+                                    <SectionCard title="Additional Costs" accent="border-orange-400"
+                                        icon={<Plus className="w-4 h-4 text-orange-500" />}>
+                                        <div className="space-y-2">
+                                            {additionalCosts.map((row, i) => (
+                                                <div key={i} className="flex gap-2 items-center">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Cost name"
+                                                        value={row.key}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setAdditionalCosts(prev =>
+                                                                prev.map((x, j) => j === i ? { ...x, key: val } : x)
+                                                            );
+                                                        }}
+                                                        className="form-input flex-1 px-2.5 py-1.5 text-sm"
+                                                    />
+                                                    <input
+                                                        type="number" min="0" step="1"
+                                                        placeholder="Amount"
+                                                        value={row.value}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setAdditionalCosts(prev =>
+                                                                prev.map((x, j) => j === i ? { ...x, value: val } : x)
+                                                            );
+                                                        }}
+                                                        onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                                        className="form-input w-32 px-2.5 py-1.5 text-sm"
+                                                    />
+                                                    <button
+                                                        onClick={() => setAdditionalCosts(prev => prev.filter((_, j) => j !== i))}
+                                                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                onClick={() => setAdditionalCosts(prev => [...prev, { key: '', value: '' }])}
+                                                className="flex items-center gap-1.5 text-sm text-orange-600 hover:text-orange-700 font-semibold mt-1">
+                                                <Plus className="w-3.5 h-3.5" /> Add Cost
+                                            </button>
+                                        </div>
+                                    </SectionCard>
+
                                     <SectionCard title="Staff Salaries (Basic + Fix)" accent="border-violet-400"
                                         icon={<Users className="w-4 h-4 text-violet-500" />}>
                                         {preview.staff_salaries.length === 0
