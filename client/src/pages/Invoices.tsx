@@ -751,15 +751,11 @@ const Invoices: React.FC = () => {
                                     </SectionCard>
 
                                     <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-                                        <div>
-                                            {/* TODO Task 6: replace with editable cost variants UI */}
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                        <div className="grid grid-cols-3 gap-2 pt-1">
                                             {[
-                                                { label: 'Cost Variants', val: preview.cost_variant_total, color: 'text-amber-700' },
-                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,  color: 'text-violet-700' },
-                                                { label: 'Expense',       val: 0, color: 'text-slate-700' },
-                                                { label: 'Invoice Price', val: preview.total_invoice_price, color: 'text-emerald-700' },
+                                                { label: 'Cost Variants', val: computedCostVariantTotal,       color: 'text-amber-700' },
+                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,       color: 'text-violet-700' },
+                                                { label: 'Invoice Price', val: preview.total_invoice_price,    color: 'text-emerald-700' },
                                             ].map(c => (
                                                 <div key={c.label} className="bg-slate-50 rounded-xl p-3 text-center">
                                                     <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">{c.label}</p>
