@@ -304,7 +304,6 @@ const Dashboard: React.FC = () => {
         const totalActiveWorkers = sitesData.reduce((s: number, x: any) => s + (x.active_workers || x.unique_attendees || 0), 0);
         const totalUnits         = sitesData.reduce((s: number, x: any) => s + (x.total_units || 0), 0);
         const totalTarget        = sitesData.reduce((s: number, x: any) => s + (x.total_target || 0), 0);
-        const totalOT            = sitesData.reduce((s: number, x: any) => s + (x.ot_payment || 0), 0);
         const companyAchievement = totalTarget > 0 ? Math.round(totalUnits / totalTarget * 100) : null;
 
         const slideSites   = sitesData.filter((s: any) => s.task_records > 0 || s.total_units > 0);
@@ -396,7 +395,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* KPI Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {[
                         { label: 'Total Sites',    val: stats.totalSites,                    sub: `${stats.totalStaff} staff`,              color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200',   icon: MapPin },
                         { label: 'Active Workers', val: totalActiveWorkers,                  sub: 'in period',                              color: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200',       icon: Users },
@@ -410,7 +409,6 @@ const Dashboard: React.FC = () => {
                             bg:    companyAchievement === null ? 'bg-slate-50 border-slate-200' : companyAchievement >= 100 ? 'bg-emerald-50 border-emerald-200' : companyAchievement >= 80 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200',
                             icon: TrendingUp,
                         },
-                        { label: 'Total OT Paid',  val: fmtK(totalOT),                       sub: 'target + time OT',                       color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200',     icon: DollarSign },
                     ].map((kpi, i) => (
                         <div key={i} className={`${kpi.bg} border rounded-2xl p-4`}>
                             <div className="flex items-center justify-between mb-2">
