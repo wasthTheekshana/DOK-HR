@@ -157,17 +157,52 @@ export const previewInvoice = async (req: Request, res: Response) => {
     }
 };
 
-// POST /api/invoices — save an invoice record
+// POST /api/invoices — save an invoice record and upsert cost variants
 export const saveInvoice = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { site_id, site_no, site_name, date_from, date_to,
-            cost_variant_amount, salary_ot_amount, expense_cost, invoice_price } = req.body;
+    const {
+        site_id, site_no, site_name, date_from, date_to,
+        cost_variants,
+        salary_ot_amount,
+        invoice_price,
+    } = req.body;
 
     if (!site_id || !date_from || !date_to) {
         return res.status(400).json({ message: 'site_id, date_from, date_to are required' });
     }
 
+    const variants: { key: string; value: string }[] =
+        Array.isArray(cost_variants) ? cost_variants : [];
+
+    const cost_variant_amount = variants.reduce((s, v) => {
+        const n = parseFloat(v.value);
+        return s + (isNaN(n) ? 0 : n);
+    }, 0);
+
     try {
+        for (const variant of variants) {
+            const key   = String(variant.key).trim();
+            const value = String(variant.value).trim();
+            if (!key) continue;
+
+            const existing = await execute<any>(
+                `SELECT id FROM cost_varient WHERE site_id = :site_id AND factor_key = :key`,
+                { site_id: Number(site_id), key }
+            );
+
+            if (existing.rows && existing.rows.length > 0) {
+                await execute(
+                    `UPDATE cost_varient SET factor_value = :value WHERE site_id = :site_id AND factor_key = :key`,
+                    { site_id: Number(site_id), key, value }
+                );
+            } else {
+                await execute(
+                    `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :key, :value)`,
+                    { site_id: Number(site_id), key, value }
+                );
+            }
+        }
+
         const result = await execute<any>(
             `INSERT INTO profit_amount
                 (site_id, site_no, site_name, date_from, date_to,
@@ -175,19 +210,18 @@ export const saveInvoice = async (req: Request, res: Response) => {
              VALUES
                 (:site_id, :site_no, :site_name,
                  TO_DATE(:date_from, 'YYYY-MM-DD'), TO_DATE(:date_to, 'YYYY-MM-DD'),
-                 :cost_variant_amount, :salary_ot_amount, :expense_cost, :invoice_price, :created_by)
+                 :cost_variant_amount, :salary_ot_amount, 0, :invoice_price, :created_by)
              RETURNING id INTO :id`,
             {
-                site_id: Number(site_id),
-                site_no: site_no || '',
-                site_name: site_name || '',
+                site_id:             Number(site_id),
+                site_no:             site_no   || '',
+                site_name:           site_name || '',
                 date_from,
                 date_to,
-                cost_variant_amount: Number(cost_variant_amount) || 0,
-                salary_ot_amount: Number(salary_ot_amount) || 0,
-                expense_cost: Number(expense_cost) || 0,
-                invoice_price: Number(invoice_price) || 0,
-                created_by: userId,
+                cost_variant_amount: Math.round(cost_variant_amount * 100) / 100,
+                salary_ot_amount:    Number(salary_ot_amount) || 0,
+                invoice_price:       Number(invoice_price)    || 0,
+                created_by:          userId,
                 id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
             }
         );

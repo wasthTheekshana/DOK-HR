@@ -11,6 +11,7 @@ import payrollRoutes from './routes/payrollRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 import invoiceRoutes from './routes/invoiceRoutes';
 import poyaRoutes from './routes/poyaRoutes';
+import assignmentRoutes from './routes/assignmentRoutes';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/payroll', payrollRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/poya-days', poyaRoutes);
+app.use('/api/assignments', assignmentRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });

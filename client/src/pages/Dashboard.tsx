@@ -304,7 +304,6 @@ const Dashboard: React.FC = () => {
         const totalActiveWorkers = sitesData.reduce((s: number, x: any) => s + (x.active_workers || x.unique_attendees || 0), 0);
         const totalUnits         = sitesData.reduce((s: number, x: any) => s + (x.total_units || 0), 0);
         const totalTarget        = sitesData.reduce((s: number, x: any) => s + (x.total_target || 0), 0);
-        const totalOT            = sitesData.reduce((s: number, x: any) => s + (x.ot_payment || 0), 0);
         const companyAchievement = totalTarget > 0 ? Math.round(totalUnits / totalTarget * 100) : null;
 
         const slideSites   = sitesData.filter((s: any) => s.task_records > 0 || s.total_units > 0);
@@ -396,7 +395,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* KPI Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {[
                         { label: 'Total Sites',    val: stats.totalSites,                    sub: `${stats.totalStaff} staff`,              color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200',   icon: MapPin },
                         { label: 'Active Workers', val: totalActiveWorkers,                  sub: 'in period',                              color: 'text-blue-700',   bg: 'bg-blue-50 border-blue-200',       icon: Users },
@@ -410,7 +409,6 @@ const Dashboard: React.FC = () => {
                             bg:    companyAchievement === null ? 'bg-slate-50 border-slate-200' : companyAchievement >= 100 ? 'bg-emerald-50 border-emerald-200' : companyAchievement >= 80 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200',
                             icon: TrendingUp,
                         },
-                        { label: 'Total OT Paid',  val: fmtK(totalOT),                       sub: 'target + time OT',                       color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200',     icon: DollarSign },
                     ].map((kpi, i) => (
                         <div key={i} className={`${kpi.bg} border rounded-2xl p-4`}>
                             <div className="flex items-center justify-between mb-2">
@@ -480,42 +478,55 @@ const Dashboard: React.FC = () => {
                                 </div>
 
                                 {/* Target vs Performance — three columns */}
-                                {currentSlide.total_target > 0 ? (
-                                    <div className={`rounded-2xl p-5 border ${achBg(currentSlide.achievement_pct)} mb-4`}>
+                                {(() => {
+                                    const slideTarget = (currentSlide.daily_target || 0) * 22 * (currentSlide.active_workers || 0);
+                                    const slideAchievement = slideTarget > 0 ? Math.round(currentSlide.total_units / slideTarget * 1000) / 10 : null;
+                                    const slideExtra = currentSlide.total_units > slideTarget ? currentSlide.total_units - slideTarget : 0;
+                                    return slideTarget > 0 ? (
+                                    <div className={`rounded-2xl p-5 border ${achBg(slideAchievement)} mb-4`}>
                                         <div className="grid grid-cols-3 gap-4 items-center">
                                             <div className="text-center">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Actual Units</p>
-                                                <p className={`text-[38px] font-black leading-none ${achColor(currentSlide.achievement_pct)}`}>
+                                                <p className={`text-[38px] font-black leading-none ${achColor(slideAchievement)}`}>
                                                     {Number(currentSlide.total_units || 0).toLocaleString()}
                                                 </p>
                                                 <p className="text-[11px] text-slate-400 mt-1">produced</p>
                                             </div>
                                             <div className="text-center border-x border-slate-200 px-4">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Achievement</p>
-                                                <p className={`text-[44px] font-black leading-none ${achColor(currentSlide.achievement_pct)}`}>
-                                                    {currentSlide.achievement_pct}%
+                                                <p className={`text-[44px] font-black leading-none ${achColor(slideAchievement)}`}>
+                                                    {slideAchievement}%
                                                 </p>
                                                 <div className="mt-2 h-2 bg-white/80 border border-slate-200 rounded-full overflow-hidden">
-                                                    <div className={`h-full rounded-full transition-all duration-700 ${achBar(currentSlide.achievement_pct)}`}
-                                                        style={{ width: `${Math.min(Number(currentSlide.achievement_pct || 0), 100)}%` }} />
+                                                    <div className={`h-full rounded-full transition-all duration-700 ${achBar(slideAchievement)}`}
+                                                        style={{ width: `${Math.min(Number(slideAchievement || 0), 100)}%` }} />
                                                 </div>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Target Units</p>
                                                 <p className="text-[38px] font-black text-slate-500 leading-none">
-                                                    {Number(currentSlide.total_target || 0).toLocaleString()}
+                                                    {slideTarget.toLocaleString()}
                                                 </p>
-                                                <p className="text-[11px] text-slate-400 mt-1">expected</p>
+                                                <p className="text-[11px] text-slate-400 mt-1">daily × 22 × staff</p>
                                             </div>
                                         </div>
+                                        {slideExtra > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-white/50 flex items-center justify-between">
+                                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Extra Units</p>
+                                                <p className="text-[20px] font-black text-emerald-600 leading-none">
+                                                    +{slideExtra.toLocaleString()}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-4">
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Period Activity</p>
-                                        <p className="text-[42px] font-black text-slate-700 leading-none">{Number(currentSlide.task_records || 0).toLocaleString()}</p>
-                                        <p className="text-[12px] text-slate-400 mt-1.5">Task records (time-based site)</p>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-4">
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Period Activity</p>
+                                            <p className="text-[42px] font-black text-slate-700 leading-none">{Number(currentSlide.task_records || 0).toLocaleString()}</p>
+                                            <p className="text-[12px] text-slate-400 mt-1.5">Task records (time-based site)</p>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Site KPIs */}
                                 <div className="grid grid-cols-4 gap-3">
@@ -587,29 +598,50 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4">ALL SITES &mdash; TARGET vs ACHIEVEMENT</h3>
                             {bizLoading ? (
                                 <div className="skeleton h-44 rounded-xl" />
-                            ) : sitesData.filter((s: any) => s.achievement_pct !== null).length === 0 ? (
-                                <div className="flex items-center justify-center h-44 text-slate-400 text-xs">No target-based data for this period</div>
+                            ) : sitesData.filter((s: any) => s.total_target > 0).length === 0 ? (
+                                <div className="flex items-center justify-center h-44 text-slate-400 text-xs">No sites with daily targets configured</div>
                             ) : (
-                                <ResponsiveContainer width="100%" height={160}>
+                                <ResponsiveContainer width="100%" height={180}>
                                     <BarChart
                                         data={[...sitesData]
-                                            .filter((s: any) => s.achievement_pct !== null)
-                                            .slice(0, 12)
-                                            .map((s: any) => ({ name: s.site_no, achievement: s.achievement_pct }))}
-                                        barSize={18}
+                                            .map((s: any) => {
+                                                const target = (s.daily_target || 0) * 22 * (s.active_workers || 0);
+                                                const achievement = target > 0 ? Math.round(s.total_units / target * 1000) / 10 : null;
+                                                return { name: s.site_no, site_name: s.site_name, target, actual: s.total_units, achievement };
+                                            })
+                                            .filter((s: any) => s.target > 0)}
+                                        barCategoryGap="30%"
+                                        barGap={2}
                                         margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
-                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(v: number) => `${v}%`} domain={[0, 120]} />
+                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
                                         <Tooltip
-                                            formatter={(val: unknown) => [`${val}%`, 'Achievement']}
-                                            contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
-                                        <Bar dataKey="achievement" name="Achievement" radius={[4, 4, 0, 0]}>
+                                            content={({ active, payload, label }: any) => {
+                                                if (!active || !payload?.length) return null;
+                                                const d = payload[0]?.payload;
+                                                return (
+                                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
+                                                        <p style={{ fontWeight: 700, marginBottom: 4 }}>{d?.site_name || label}</p>
+                                                        <p style={{ color: '#6366f1' }}>Actual: {Number(d?.actual || 0).toLocaleString()}</p>
+                                                        <p style={{ color: '#94a3b8' }}>Target: {Number(d?.target || 0).toLocaleString()}</p>
+                                                        <p style={{ color: d?.achievement >= 100 ? '#10b981' : d?.achievement >= 80 ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                                                            Achievement: {d?.achievement != null ? `${d.achievement}%` : 'N/A'}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }}
+                                        />
+                                        <Bar dataKey="target" name="Target" fill="#cbd5e1" radius={[3, 3, 0, 0]} barSize={14} />
+                                        <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]} barSize={14}>
                                             {[...sitesData]
-                                                .filter((s: any) => s.achievement_pct !== null)
-                                                .slice(0, 12)
-                                                .map((s: any, i: number) => (
-                                                    <Cell key={i} fill={s.achievement_pct >= 100 ? '#10b981' : s.achievement_pct >= 80 ? '#f59e0b' : '#ef4444'} />
+                                                .map((s: any) => {
+                                                    const target = (s.daily_target || 0) * 22 * (s.active_workers || 0);
+                                                    return target > 0 ? Math.round(s.total_units / target * 1000) / 10 : null;
+                                                })
+                                                .filter((pct: any) => pct !== null)
+                                                .map((pct: any, i: number) => (
+                                                    <Cell key={i} fill={pct >= 100 ? '#10b981' : pct >= 80 ? '#f59e0b' : '#ef4444'} />
                                                 ))}
                                         </Bar>
                                     </BarChart>

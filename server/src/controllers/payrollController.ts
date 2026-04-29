@@ -35,6 +35,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                 JOIN sites s ON t.site_id = s.id
                 WHERE t.ot_type = 'time_based'
                 AND t.task_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')
+                AND u.site_id = t.site_id
             `;
 
             const params: any = { date_from: String(date_from), date_to: String(date_to) };
@@ -100,6 +101,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                 JOIN users u ON t.staff_id = u.id
                 WHERE t.ot_type = 'target_based'
                 AND t.task_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')
+                AND u.site_id = t.site_id
             `;
 
             const params: any = { date_from: String(date_from), date_to: String(date_to) };

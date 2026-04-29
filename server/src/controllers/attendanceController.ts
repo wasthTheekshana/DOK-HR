@@ -9,7 +9,7 @@ export const getAttendance = async (req: Request, res: Response) => {
     try {
         let query = `
         SELECT a.id, a.site_id, a.staff_id, a.attendance_date, a.in_time, a.out_time,
-               u.name as staff_name, s.site_no, s.name as site_name
+               u.name as staff_name, s.site_no, s.name as site_name, s.ot_type
         FROM attendance a
         JOIN sites s ON a.site_id = s.id
         JOIN users u ON a.staff_id = u.id
@@ -65,6 +65,8 @@ export const createAttendance = async (req: Request, res: Response) => {
 
 export const getAttendanceReport = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to } = req.query;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
     try {
         let query = `
         SELECT u.name as staff_name,
@@ -76,6 +78,14 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
         WHERE 1=1
       `;
         const params: any = {};
+
+        if (userRole === 'supervisor') {
+            query += ` AND s.supervisor_id = :userId`;
+            params.userId = userId;
+        } else if (userRole === 'staff') {
+            query += ` AND a.staff_id = :userId`;
+            params.userId = userId;
+        }
 
         if (site_no) {
             query += ` AND s.site_no = :site_no`;

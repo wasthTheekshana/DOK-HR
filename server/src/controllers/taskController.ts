@@ -67,6 +67,9 @@ export const getTasks = async (req: Request, res: Response) => {
         if (userRole === 'supervisor') {
             query += ` AND s.supervisor_id = :userId`;
             params.userId = userId;
+        } else if (userRole === 'staff') {
+            query += ` AND t.staff_id = :userId`;
+            params.userId = userId;
         }
 
         if (site_no) {
@@ -264,9 +267,17 @@ export const getDailyCountReport = async (req: Request, res: Response) => {
 
 export const getTaskSummary = async (req: Request, res: Response) => {
     const { date, date_to, site_id } = req.query;
+
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: 'date is required (YYYY-MM-DD)' });
+    }
+    if (date_to && typeof date_to === 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+        return res.status(400).json({ message: 'date_to must be YYYY-MM-DD' });
+    }
+
     try {
         // Support both single date and date range
-        const dateFrom = String(date);
+        const dateFrom = date;
         const dateTo = date_to ? String(date_to) : dateFrom;
 
         let query = `
@@ -310,13 +321,13 @@ export const getTaskSummary = async (req: Request, res: Response) => {
             siteData.staff_ids.add(task.STAFF_ID);
             siteData.tasks.push(task);
 
-            // Aggregate counts for target-based
-            if (task.SITE_OT_TYPE === 'target_based' && task.COUNT) {
+            // Aggregate counts for both target-based and time-based/staff_outsource
+            if (task.COUNT) {
                 siteData.total_count += Number(task.COUNT) || 0;
             }
 
-            // Calculate hours for time-based
-            if (task.SITE_OT_TYPE === 'time_based' && task.IN_TIME && task.OUT_TIME) {
+            // Calculate hours for time-based and staff_outsource
+            if ((task.SITE_OT_TYPE === 'time_based' || task.SITE_OT_TYPE === 'staff_outsource') && task.IN_TIME && task.OUT_TIME) {
                 const inTime = task.IN_TIME.split(':');
                 const outTime = task.OUT_TIME.split(':');
                 const inMinutes = parseInt(inTime[0]) * 60 + parseInt(inTime[1]);

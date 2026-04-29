@@ -101,7 +101,7 @@ const TimeSitePerformance: React.FC = () => {
     // Load time-based sites only
     useEffect(() => {
         api.get('/sites').then(res => {
-            const timeSites = (res.data || []).filter((s: Site) => s.OT_TYPE === 'time_based' || !s.OT_TYPE);
+            const timeSites = (res.data || []).filter((s: Site) => s.OT_TYPE === 'time_based' || s.OT_TYPE === 'staff_outsource' || !s.OT_TYPE);
             setSites(timeSites);
             if (timeSites.length > 0) setSelectedSiteId(String(timeSites[0].ID));
         }).catch(console.error);
@@ -289,10 +289,10 @@ const TimeSitePerformance: React.FC = () => {
                             <ResponsiveContainer width="100%" height={220}>
                                 <ComposedChart
                                     data={data.daily.map((d: any) => ({
-                                        date:     d.date?.slice(5),   // MM-DD
-                                        workers:  d.unique_workers,
-                                        records:  d.task_records,
-                                        avg_hrs:  d.avg_hours,
+                                        date:    d.date?.slice(5),   // MM-DD
+                                        workers: d.unique_workers,
+                                        count:   d.total_count,
+                                        avg_hrs: d.avg_hours,
                                     }))}
                                     margin={{ top: 4, right: 24, left: 0, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -303,7 +303,7 @@ const TimeSitePerformance: React.FC = () => {
                                     <Tooltip content={<CustomTip />} />
                                     <Legend wrapperStyle={{ fontSize: 11 }} />
                                     <Bar yAxisId="left" dataKey="workers" name="Workers" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={14} />
-                                    <Bar yAxisId="left" dataKey="records" name="Task Records" fill="#c7d2fe" radius={[3, 3, 0, 0]} barSize={14} />
+                                    <Bar yAxisId="left" dataKey="count" name="Total Count" fill="#10b981" radius={[3, 3, 0, 0]} barSize={14} />
                                     {data.summary.hasTimeData && (
                                         <Line yAxisId="right" type="monotone" dataKey="avg_hrs" name="Avg Hours"
                                             stroke="#f59e0b" strokeWidth={2} dot={false} />
@@ -419,7 +419,7 @@ const TimeSitePerformance: React.FC = () => {
                                                 <th className="text-left px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Staff Name</th>
                                                 <th className="text-left px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">EPF</th>
                                                 <th className="text-right px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Days Worked</th>
-                                                <th className="text-right px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Task Records</th>
+                                                <th className="text-right px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Total Count</th>
                                                 <th className="text-right px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Avg Hours</th>
                                                 <th className="text-right px-3 py-2 font-bold text-slate-500 text-[10px] uppercase tracking-wider">Performance</th>
                                             </tr>
@@ -437,7 +437,7 @@ const TimeSitePerformance: React.FC = () => {
                                                             <span className="font-black text-indigo-700">{s.days_worked}</span>
                                                             <span className="text-slate-400 ml-1">days</span>
                                                         </td>
-                                                        <td className="px-3 py-2 text-right font-semibold text-slate-700">{s.task_records}</td>
+                                                        <td className="px-3 py-2 text-right font-semibold text-emerald-700">{s.total_count}</td>
                                                         <td className="px-3 py-2 text-right font-semibold text-slate-600">{fmtHrs(s.avg_hours)}</td>
                                                         <td className="px-3 py-2">
                                                             <div className="flex items-center justify-end gap-2">

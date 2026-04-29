@@ -200,19 +200,23 @@ const SitePerformance: React.FC = () => {
 
                     {/* Daily Trend Chart */}
                     <ChartCard title="Daily Actual Count vs Target">
-                        {data.dailyTrend.length === 0 ? <EmptyChart message="No tasks in this period" /> : (
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={data.dailyTrend} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} />
-                                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    <Line type="monotone" dataKey="actual" name="Actual Count" stroke="#6366f1" strokeWidth={2.5} dot={data.dailyTrend.length <= 31 ? { r: 3 } : false} activeDot={{ r: 5 }} />
-                                    <Line type="monotone" dataKey="target" name="Target" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        )}
+                        {data.dailyTrend.length === 0 ? <EmptyChart message="No tasks in this period" /> : (() => {
+                            const dailyTarget = (data.siteInfo.daily_target || 0) * (data.summary.staffCount || 0);
+                            const chartData = data.dailyTrend.map((d: any) => ({ ...d, target: dailyTarget }));
+                            return (
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} />
+                                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Line type="monotone" dataKey="actual" name="Actual Count" stroke="#6366f1" strokeWidth={2.5} dot={data.dailyTrend.length <= 31 ? { r: 3 } : false} activeDot={{ r: 5 }} />
+                                        <Line type="monotone" dataKey="target" name={`Target (${data.siteInfo.daily_target} × ${data.summary.staffCount} staff)`} stroke="#f43f5e" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            );
+                        })()}
                     </ChartCard>
 
                     {/* Per-staff bar chart + over/under performers */}

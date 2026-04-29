@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import type { Site, InvoiceRecord, InvoicePreview } from '../types';
+import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -37,7 +37,8 @@ const Invoices: React.FC = () => {
     const [dateTo, setDateTo]               = useState('');
     const [calculating, setCalculating]     = useState(false);
     const [preview, setPreview]             = useState<InvoicePreview | null>(null);
-    const [expenseCost, setExpenseCost]     = useState('');
+    const [editedVariants,  setEditedVariants]  = useState<{ key: string; value: string }[]>([]);
+    const [additionalCosts, setAdditionalCosts] = useState<{ key: string; value: string }[]>([]);
     const [saving, setSaving]               = useState(false);
 
     // ── Edit modal ──
@@ -63,7 +64,8 @@ const Invoices: React.FC = () => {
     // ── Generate modal handlers ──
     const openModal = () => {
         setSelectedSiteId(''); setDateFrom(''); setDateTo('');
-        setPreview(null); setExpenseCost('');
+        setPreview(null);
+        setEditedVariants([]); setAdditionalCosts([]);
         setIsModalOpen(true);
     };
 
@@ -73,22 +75,41 @@ const Invoices: React.FC = () => {
         setCalculating(true); setPreview(null);
         try {
             const r = await api.post('/invoices/preview', { site_id: Number(selectedSiteId), date_from: dateFrom, date_to: dateTo });
-            setPreview(r.data); setExpenseCost('');
+            const data = r.data;
+            setPreview(data);
+            setEditedVariants(
+                data.cost_factors.map((f: InvoiceCostFactor) => ({
+                    key:   f.key,
+                    value: f.numeric ? String(f.amount) : f.value,
+                }))
+            );
+            setAdditionalCosts([]);
         } catch (err: any) { alert(err.response?.data?.message || 'Calculation failed'); }
         finally { setCalculating(false); }
     };
 
     const handleSave = async () => {
         if (!preview) return;
+        for (const row of additionalCosts) {
+            if (!row.key.trim()) { alert('Each additional cost must have a name.'); return; }
+            const n = parseFloat(row.value);
+            if (isNaN(n) || n < 0) { alert('Each additional cost must have a valid amount (≥ 0).'); return; }
+        }
         setSaving(true);
         try {
+            const allVariants = [
+                ...editedVariants,
+                ...additionalCosts.map(r => ({ key: r.key.trim(), value: r.value })),
+            ];
             await api.post('/invoices', {
-                site_id: preview.site.ID, site_no: preview.site.SITE_NO, site_name: preview.site.NAME,
-                date_from: preview.date_from, date_to: preview.date_to,
-                cost_variant_amount: preview.cost_variant_total,
+                site_id:          preview.site.ID,
+                site_no:          preview.site.SITE_NO,
+                site_name:        preview.site.NAME,
+                date_from:        preview.date_from,
+                date_to:          preview.date_to,
+                cost_variants:    allVariants,
                 salary_ot_amount: preview.salary_ot_amount,
-                expense_cost: expenseCost ? Number(expenseCost) : 0,
-                invoice_price: preview.total_invoice_price,
+                invoice_price:    preview.total_invoice_price,
             });
             setIsModalOpen(false); fetchInvoices();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to save invoice'); }
@@ -296,6 +317,16 @@ const Invoices: React.FC = () => {
         XLSX.utils.book_append_sheet(wb, ws, 'Invoice Report');
         XLSX.writeFile(wb, `Invoice_${inv.SITE_NO}_${inv.DATE_FROM}_${inv.DATE_TO}.xlsx`);
     };
+
+    const computedCostVariantTotal =
+        editedVariants.reduce((s, v) => {
+            const n = parseFloat(v.value);
+            return s + (isNaN(n) ? 0 : n);
+        }, 0) +
+        additionalCosts.reduce((s, v) => {
+            const n = parseFloat(v.value);
+            return s + (isNaN(n) ? 0 : n);
+        }, 0);
 
     const totalInvoiceValue = invoices.reduce((s, inv) => s + Number(inv.INVOICE_PRICE || 0), 0);
 
@@ -556,20 +587,85 @@ const Invoices: React.FC = () => {
                                                         <th className="pb-2 text-right text-xs font-semibold text-slate-500">Amount</th>
                                                     </tr></thead>
                                                     <tbody className="divide-y divide-slate-50">
-                                                        {preview.cost_factors.map((f, i) => (
+                                                        {editedVariants.map((v, i) => (
                                                             <tr key={i}>
-                                                                <td className="py-2 text-slate-700 font-medium">{f.key}</td>
-                                                                <td className="py-2 text-slate-500">{f.value}</td>
-                                                                <td className="py-2 text-right font-semibold text-amber-700">{f.numeric ? fmt(f.amount) : '—'}</td>
+                                                                <td className="py-1.5 pr-2">
+                                                                    <span className="text-slate-700 font-medium">{v.key}</span>
+                                                                </td>
+                                                                <td className="py-1.5 pr-2">
+                                                                    {preview.cost_factors[i]?.numeric ? (
+                                                                        <input
+                                                                            type="number" min="0" step="1"
+                                                                            value={v.value}
+                                                                            onChange={e => {
+                                                                                const val = e.target.value;
+                                                                                setEditedVariants(prev =>
+                                                                                    prev.map((x, j) => j === i ? { ...x, value: val } : x)
+                                                                                );
+                                                                            }}
+                                                                            className="form-input w-full px-2 py-1 text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-slate-400 text-sm">{v.value}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-1.5 text-right font-semibold text-amber-700">
+                                                                    {preview.cost_factors[i]?.numeric ? fmt(parseFloat(v.value) || 0) : '—'}
+                                                                </td>
                                                             </tr>
                                                         ))}
                                                     </tbody>
                                                     <tfoot><tr className="border-t-2 border-amber-200">
                                                         <td colSpan={2} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Cost Variants</td>
-                                                        <td className="pt-2.5 text-right font-black text-amber-700">{fmt(preview.cost_variant_total)}</td>
+                                                        <td className="pt-2.5 text-right font-black text-amber-700">{fmt(computedCostVariantTotal)}</td>
                                                     </tr></tfoot>
                                                 </table>
                                             )}
+                                    </SectionCard>
+
+                                    <SectionCard title="Additional Costs" accent="border-orange-400"
+                                        icon={<Plus className="w-4 h-4 text-orange-500" />}>
+                                        <div className="space-y-2">
+                                            {additionalCosts.map((row, i) => (
+                                                <div key={i} className="flex gap-2 items-center">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Cost name"
+                                                        value={row.key}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setAdditionalCosts(prev =>
+                                                                prev.map((x, j) => j === i ? { ...x, key: val } : x)
+                                                            );
+                                                        }}
+                                                        className="form-input flex-1 px-2.5 py-1.5 text-sm"
+                                                    />
+                                                    <input
+                                                        type="number" min="0" step="1"
+                                                        placeholder="Amount"
+                                                        value={row.value}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setAdditionalCosts(prev =>
+                                                                prev.map((x, j) => j === i ? { ...x, value: val } : x)
+                                                            );
+                                                        }}
+                                                        onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                                        className="form-input w-32 px-2.5 py-1.5 text-sm"
+                                                    />
+                                                    <button
+                                                        onClick={() => setAdditionalCosts(prev => prev.filter((_, j) => j !== i))}
+                                                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                onClick={() => setAdditionalCosts(prev => [...prev, { key: '', value: '' }])}
+                                                className="flex items-center gap-1.5 text-sm text-orange-600 hover:text-orange-700 font-semibold mt-1">
+                                                <Plus className="w-3.5 h-3.5" /> Add Cost
+                                            </button>
+                                        </div>
                                     </SectionCard>
 
                                     <SectionCard title="Staff Salaries (Basic + Fix)" accent="border-violet-400"
@@ -655,20 +751,11 @@ const Invoices: React.FC = () => {
                                     </SectionCard>
 
                                     <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Additional Expense Cost (Rs.) — optional</label>
-                                            <input type="number" min="0" step="1" value={expenseCost}
-                                                onChange={e => setExpenseCost(e.target.value)}
-                                                onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
-                                                className="form-input w-full px-3.5 py-2.5"
-                                                placeholder="0" />
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                        <div className="grid grid-cols-3 gap-2 pt-1">
                                             {[
-                                                { label: 'Cost Variants', val: preview.cost_variant_total, color: 'text-amber-700' },
-                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,  color: 'text-violet-700' },
-                                                { label: 'Expense',       val: expenseCost ? Number(expenseCost) : 0, color: 'text-slate-700' },
-                                                { label: 'Invoice Price', val: preview.total_invoice_price, color: 'text-emerald-700' },
+                                                { label: 'Cost Variants', val: computedCostVariantTotal,       color: 'text-amber-700' },
+                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,       color: 'text-violet-700' },
+                                                { label: 'Invoice Price', val: preview.total_invoice_price,    color: 'text-emerald-700' },
                                             ].map(c => (
                                                 <div key={c.label} className="bg-slate-50 rounded-xl p-3 text-center">
                                                     <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">{c.label}</p>

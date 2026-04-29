@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { Task, Site, User } from '../types';
-import { Calendar, MapPin, Target, Save, Loader2, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, Pencil, X, Check } from 'lucide-react';
+import { Calendar, MapPin, Target, Loader2, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, Pencil, X, Check, Download, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
+import * as XLSX from 'xlsx';
 
 const TaskTypeSelect: React.FC<{ value: string; onChange: (v: string) => void; taskTypes: any[] }> = ({ value, onChange, taskTypes }) => (
     <select value={value} onChange={e => onChange(e.target.value)}
@@ -22,11 +23,11 @@ const Tasks: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState<string>(today);
     const [viewMode, setViewMode] = useState<'daily' | 'summary'>('daily');
     const [summaryDateFrom, setSummaryDateFrom] = useState<string>(format(new Date(new Date().setDate(new Date().getDate() - 7)), 'yyyy-MM-dd'));
-    const [summaryDateTo, setSummaryDateTo] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+    const [summaryDateTo, setSummaryDateTo] = useState<string>(today);
+    const [summaryData, setSummaryData] = useState<any[]>([]);
     const [expandedSites, setExpandedSites] = useState<Set<string>>(new Set());
     const [users, setUsers] = useState<User[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [summaryData, setSummaryData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     // newDrafts: staffId → array of new unsaved task forms
     const [newDrafts, setNewDrafts] = useState<Record<number, Array<{ _tid: string } & Partial<Task>>>>({});
@@ -82,7 +83,7 @@ const Tasks: React.FC = () => {
 
             const [siteRes, usersRes, tasksRes] = await Promise.all([
                 api.get(`/sites/${siteBasic.ID}`),
-                api.get(`/users?site=${siteBasic.ID}&role=staff,supervisor&status=active`),
+                api.get(`/users?site=${siteBasic.ID}&role=staff,supervisor&status=active&date=${selectedDate}`),
                 api.get(`/tasks?site_no=${selectedSite}&date_from=${selectedDate}&date_to=${selectedDate}`)
             ]);
             const allUsers = usersRes.data;
@@ -100,13 +101,155 @@ const Tasks: React.FC = () => {
         try {
             const params: any = { date: summaryDateFrom };
             if (summaryDateTo && summaryDateTo !== summaryDateFrom) params.date_to = summaryDateTo;
-            const response = await api.get('/tasks/daily-summary', { params });
-            setSummaryData(response.data);
-        } catch (error) { console.error('Failed to load summary', error); }
+            const res = await api.get('/tasks/daily-summary', { params });
+            setSummaryData(res.data);
+        } catch (err) { console.error('Failed to load summary', err); }
         finally { setLoading(false); }
     };
 
+    const downloadSummaryReport = () => {
+        if (summaryData.length === 0) { alert('No summary data to download'); return; }
+        const wb = XLSX.utils.book_new();
+        const totalStaff  = summaryData.reduce((s: number, d: any) => s + d.total_staff, 0);
+        const totalHours  = summaryData.reduce((s: number, d: any) => s + (d.total_hours || 0), 0);
+        const totalCount  = summaryData.reduce((s: number, d: any) => s + (d.total_count || 0), 0);
+        const overviewAoa: any[][] = [
+            [`Task Summary Report — ${summaryDateFrom} to ${summaryDateTo}`], [],
+            ['Sites', 'Staff', 'Total Hours', 'Total Count'],
+            [summaryData.length, totalStaff, Number(totalHours.toFixed(1)), totalCount], [],
+            ['Site', 'Site No', 'OT Type', 'Staff', 'Hours / Units'],
+            ...summaryData.map((d: any) => [
+                d.site_name, d.site_no,
+                d.site_ot_type === 'time_based' ? 'Time' : 'Target',
+                d.total_staff,
+                d.site_ot_type === 'time_based' ? Number((d.total_hours || 0).toFixed(1)) : d.total_count,
+            ]),
+        ];
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(overviewAoa), 'Overview');
+        const detailRows: any[] = [];
+        for (const site of summaryData) {
+            for (const task of site.tasks) {
+                detailRows.push({
+                    Site: site.site_name, 'Site No': site.site_no,
+                    'OT Type': site.site_ot_type === 'time_based' ? 'Time' : 'Target',
+                    Employee: task.STAFF_NAME,
+                    Date: task.TASK_DATE ? String(task.TASK_DATE).slice(0, 10) : '',
+                    Task: task.TASK_DESCRIPTION, Count: task.COUNT ?? '',
+                    'In Time': task.IN_TIME || '', 'Out Time': task.OUT_TIME || '',
+                });
+            }
+        }
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), 'Detail');
+        XLSX.writeFile(wb, `task_summary_${summaryDateFrom}_${summaryDateTo}.xlsx`);
+    };
+
     const getSite = () => sites.find(s => s.SITE_NO === selectedSite);
+
+    // ── Download daily task report ───────────────────────────────────────────
+    const downloadDailyReport = async () => {
+        try {
+            let allTasks: Task[] = [];
+
+            if (selectedSite === 'ALL') {
+                const res = await api.get(`/tasks?date_from=${selectedDate}&date_to=${selectedDate}`);
+                allTasks = res.data;
+            } else {
+                allTasks = tasks;
+            }
+
+            if (allTasks.length === 0) { alert('No tasks to download'); return; }
+
+            const isAllSites = selectedSite === 'ALL';
+
+            // ── Sheet 1: Detailed task rows ──────────────────────────────────
+            const detailRows = allTasks.map((t: any) => {
+                const row: any = {};
+                if (isAllSites) row['Site'] = t.SITE_NO || t.SITE_NAME || '';
+                row['Date'] = t.TASK_DATE ? t.TASK_DATE.slice(0, 10) : selectedDate;
+                row['Staff'] = t.STAFF_NAME || '';
+                row['Task'] = t.TASK_DESCRIPTION || '';
+                row['OT Type'] = t.OT_TYPE || '';
+                row['Count'] = t.COUNT ?? 0;
+                row['In Time'] = t.IN_TIME || '';
+                row['Out Time'] = t.OUT_TIME || '';
+                return row;
+            });
+
+            const wsDetail = XLSX.utils.json_to_sheet(detailRows);
+
+            // ── Sheet 2: Summary ─────────────────────────────────────────────
+            const summaryAoa: any[][] = [];
+
+            summaryAoa.push([`Daily Task Summary — ${selectedDate}${isAllSites ? ' (All Sites)' : ` — Site ${selectedSite}`}`]);
+            summaryAoa.push([]);
+
+            // Section A: Per-staff totals
+            summaryAoa.push(['Staff Summary']);
+            const staffHeader = isAllSites
+                ? ['Site', 'Staff', 'Task', 'Total Count']
+                : ['Staff', 'Task', 'Total Count'];
+            summaryAoa.push(staffHeader);
+
+            // Group: site+staff+task → total count
+            const staffMap = new Map<string, { site: string; staff: string; task: string; count: number }>();
+            for (const t of allTasks as any[]) {
+                const key = `${t.SITE_NO || ''}|${t.STAFF_NAME || ''}|${t.TASK_DESCRIPTION || ''}`;
+                if (!staffMap.has(key)) {
+                    staffMap.set(key, { site: t.SITE_NO || t.SITE_NAME || '', staff: t.STAFF_NAME || '', task: t.TASK_DESCRIPTION || '', count: 0 });
+                }
+                staffMap.get(key)!.count += Number(t.COUNT) || 0;
+            }
+
+            for (const entry of staffMap.values()) {
+                if (isAllSites) {
+                    summaryAoa.push([entry.site, entry.staff, entry.task, entry.count]);
+                } else {
+                    summaryAoa.push([entry.staff, entry.task, entry.count]);
+                }
+            }
+
+            summaryAoa.push([]);
+
+            // Section B: Per-task-type totals
+            summaryAoa.push(['Task Type Summary']);
+            const taskHeader = isAllSites ? ['Site', 'Task Type', 'Total Count'] : ['Task Type', 'Total Count'];
+            summaryAoa.push(taskHeader);
+
+            const taskMap = new Map<string, { site: string; task: string; count: number }>();
+            for (const t of allTasks as any[]) {
+                const key = `${t.SITE_NO || ''}|${t.TASK_DESCRIPTION || ''}`;
+                if (!taskMap.has(key)) {
+                    taskMap.set(key, { site: t.SITE_NO || t.SITE_NAME || '', task: t.TASK_DESCRIPTION || '', count: 0 });
+                }
+                taskMap.get(key)!.count += Number(t.COUNT) || 0;
+            }
+
+            for (const entry of taskMap.values()) {
+                if (isAllSites) {
+                    summaryAoa.push([entry.site, entry.task, entry.count]);
+                } else {
+                    summaryAoa.push([entry.task, entry.count]);
+                }
+            }
+
+            // Grand total
+            const grandTotal = allTasks.reduce((sum: number, t: any) => sum + (Number(t.COUNT) || 0), 0);
+            summaryAoa.push([]);
+            summaryAoa.push(isAllSites ? ['', 'Grand Total', grandTotal] : ['', 'Grand Total', grandTotal]);
+
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, wsDetail, 'Tasks');
+            XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+            const siteLabel = selectedSite === 'ALL' ? 'all_sites' : selectedSite;
+            XLSX.writeFile(wb, `tasks_${siteLabel}_${selectedDate}.xlsx`);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to download report');
+        }
+    };
 
     // ── New task draft helpers ──
     const addNewDraft = (staffId: number) => {
@@ -232,26 +375,20 @@ const Tasks: React.FC = () => {
                         </div>
                         {role === 'admin' && (
                             <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                                <button
-                                    onClick={() => setViewMode('daily')}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${viewMode === 'daily' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    <LayoutList className="w-3.5 h-3.5" />
-                                    Daily
+                                <button onClick={() => setViewMode('daily')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${viewMode === 'daily' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    <LayoutList className="w-3.5 h-3.5" /> Daily
                                 </button>
-                                <button
-                                    onClick={() => setViewMode('summary')}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${viewMode === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    <BarChart3 className="w-3.5 h-3.5" />
-                                    Summary
+                                <button onClick={() => setViewMode('summary')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${viewMode === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    <BarChart3 className="w-3.5 h-3.5" /> Summary
                                 </button>
                             </div>
                         )}
                     </div>
 
                     {viewMode === 'daily' ? (
-                        <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                             {!isStaff && (
                                 <div className="flex-1">
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
@@ -262,6 +399,7 @@ const Tasks: React.FC = () => {
                                             onChange={(e) => setSelectedSite(e.target.value)}
                                             className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                                         >
+                                            {role === 'admin' && <option value="ALL">All Sites</option>}
                                             {sites.map(s => <option key={s.ID} value={s.SITE_NO}>{s.NAME}</option>)}
                                         </select>
                                     </div>
@@ -282,6 +420,15 @@ const Tasks: React.FC = () => {
                                     />
                                 </div>
                             </div>
+                            {/* Download button — admin only, daily mode */}
+                            {role === 'admin' && (
+                                <div className="flex items-end">
+                                    <button onClick={downloadDailyReport}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
+                                        <Download className="w-4 h-4" /> Download
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex flex-col sm:flex-row gap-3">
@@ -289,7 +436,7 @@ const Tasks: React.FC = () => {
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">From Date</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input type="date" value={summaryDateFrom} onChange={(e) => setSummaryDateFrom(e.target.value)}
+                                    <input type="date" value={summaryDateFrom} onChange={e => setSummaryDateFrom(e.target.value)}
                                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
                                 </div>
                             </div>
@@ -297,16 +444,22 @@ const Tasks: React.FC = () => {
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">To Date</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input type="date" value={summaryDateTo} onChange={(e) => setSummaryDateTo(e.target.value)}
+                                    <input type="date" value={summaryDateTo} onChange={e => setSummaryDateTo(e.target.value)}
                                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
                                 </div>
+                            </div>
+                            <div className="flex items-end">
+                                <button onClick={downloadSummaryReport}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
+                                    <Download className="w-4 h-4" /> Download
+                                </button>
                             </div>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Stats Bar (Daily mode only) */}
+            {/* Stats Bar — daily mode only */}
             {viewMode === 'daily' && !loading && currentSite && (
                 <div className="grid grid-cols-3 gap-3">
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
@@ -351,6 +504,7 @@ const Tasks: React.FC = () => {
                         ))}
                     </div>
                 ) : viewMode === 'summary' ? (
+                    /* Summary view — admin only */
                     <div className="divide-y divide-slate-100">
                         {summaryData.length === 0 ? (
                             <div className="py-16 text-center">
@@ -359,7 +513,6 @@ const Tasks: React.FC = () => {
                             </div>
                         ) : (
                             <>
-                                {/* Summary Stats */}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5">
                                     <div className="bg-indigo-50 rounded-xl p-3 text-center">
                                         <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Sites</p>
@@ -367,19 +520,17 @@ const Tasks: React.FC = () => {
                                     </div>
                                     <div className="bg-emerald-50 rounded-xl p-3 text-center">
                                         <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Staff</p>
-                                        <p className="text-2xl font-bold text-emerald-900 mt-1">{summaryData.reduce((s, d) => s + d.total_staff, 0)}</p>
+                                        <p className="text-2xl font-bold text-emerald-900 mt-1">{summaryData.reduce((s: number, d: any) => s + d.total_staff, 0)}</p>
                                     </div>
                                     <div className="bg-blue-50 rounded-xl p-3 text-center">
                                         <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Hours</p>
-                                        <p className="text-2xl font-bold text-blue-900 mt-1">{summaryData.reduce((s, d) => s + (d.total_hours || 0), 0).toFixed(1)}</p>
+                                        <p className="text-2xl font-bold text-blue-900 mt-1">{summaryData.reduce((s: number, d: any) => s + (d.total_hours || 0), 0).toFixed(1)}</p>
                                     </div>
                                     <div className="bg-orange-50 rounded-xl p-3 text-center">
                                         <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Count</p>
-                                        <p className="text-2xl font-bold text-orange-900 mt-1">{summaryData.reduce((s, d) => s + (d.total_count || 0), 0)}</p>
+                                        <p className="text-2xl font-bold text-orange-900 mt-1">{summaryData.reduce((s: number, d: any) => s + (d.total_count || 0), 0)}</p>
                                     </div>
                                 </div>
-
-                                {/* Site Accordions */}
                                 {summaryData.map((site: any) => {
                                     const isExpanded = expandedSites.has(site.site_no);
                                     const toggle = () => setExpandedSites(prev => {
@@ -418,32 +569,26 @@ const Tasks: React.FC = () => {
                                                                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>
                                                                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
                                                                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Task</th>
-                                                                {site.site_ot_type === 'target_based' && (
+                                                                {site.site_ot_type === 'target_based' && <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Count</th>}
+                                                                {site.site_ot_type === 'time_based' && <>
+                                                                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In</th>
+                                                                    <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Out</th>
                                                                     <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Count</th>
-                                                                )}
-                                                                {site.site_ot_type === 'time_based' && (
-                                                                    <>
-                                                                        <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In</th>
-                                                                        <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Out</th>
-                                                                    </>
-                                                                )}
+                                                                </>}
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-100 bg-white">
                                                             {site.tasks.map((task: any, i: number) => (
                                                                 <tr key={i} className="hover:bg-slate-50">
                                                                     <td className="px-5 py-3 text-sm font-medium text-slate-900">{task.STAFF_NAME}</td>
-                                                                    <td className="px-5 py-3 text-sm text-slate-500">{format(new Date(task.TASK_DATE), 'MMM d')}</td>
+                                                                    <td className="px-5 py-3 text-sm text-slate-500">{task.TASK_DATE ? format(new Date(String(task.TASK_DATE).slice(0, 10)), 'MMM d') : '—'}</td>
                                                                     <td className="px-5 py-3 text-sm text-slate-600">{task.TASK_DESCRIPTION}</td>
-                                                                    {site.site_ot_type === 'target_based' && (
-                                                                        <td className="px-5 py-3 text-sm text-right font-mono font-medium text-slate-900">{task.COUNT}</td>
-                                                                    )}
-                                                                    {site.site_ot_type === 'time_based' && (
-                                                                        <>
-                                                                            <td className="px-5 py-3 text-sm font-mono text-emerald-700">{task.IN_TIME || '-'}</td>
-                                                                            <td className="px-5 py-3 text-sm font-mono text-orange-700">{task.OUT_TIME || '-'}</td>
-                                                                        </>
-                                                                    )}
+                                                                    {site.site_ot_type === 'target_based' && <td className="px-5 py-3 text-sm text-right font-mono font-medium text-slate-900">{task.COUNT}</td>}
+                                                                    {site.site_ot_type === 'time_based' && <>
+                                                                        <td className="px-5 py-3 text-sm font-mono text-emerald-700">{task.IN_TIME || '-'}</td>
+                                                                        <td className="px-5 py-3 text-sm font-mono text-orange-700">{task.OUT_TIME || '-'}</td>
+                                                                        <td className="px-5 py-3 text-sm text-right font-mono font-medium text-slate-900">{task.COUNT ?? 0}</td>
+                                                                    </>}
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -455,6 +600,19 @@ const Tasks: React.FC = () => {
                                 })}
                             </>
                         )}
+                    </div>
+                ) : selectedSite === 'ALL' ? (
+                    /* All Sites — download only panel */
+                    <div className="py-16 text-center space-y-4">
+                        <Download className="w-12 h-12 text-slate-200 mx-auto" />
+                        <div>
+                            <p className="text-slate-700 font-semibold">All Sites selected</p>
+                            <p className="text-slate-400 text-sm mt-1">Click Download to export all sites' tasks for {format(new Date(selectedDate), 'MMM dd, yyyy')}</p>
+                        </div>
+                        <button onClick={downloadDailyReport}
+                            className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors text-sm">
+                            <Download className="w-4 h-4" /> Download All Sites Report
+                        </button>
                     </div>
                 ) : (
                     /* Daily Sheet — grouped by staff, multiple tasks per person */
@@ -502,6 +660,11 @@ const Tasks: React.FC = () => {
                                                     <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${isTimeBased ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>
                                                         {isTimeBased ? 'Time' : 'Target'}
                                                     </span>
+                                                    {user.IS_TEMP === 1 && (
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                                                            Guest
+                                                        </span>
+                                                    )}
                                                     {userTasks.length > 0 && (
                                                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
                                                             {userTasks.length} task{userTasks.length > 1 ? 's' : ''}
