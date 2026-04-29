@@ -242,10 +242,16 @@ const TaskSummary: React.FC = () => {
                                         {/* metric */}
                                         <div className="text-right shrink-0 hidden sm:block">
                                             {isTime ? (
-                                                <>
-                                                    <p className="text-base font-bold text-blue-600">{(site.total_hours || 0).toFixed(1)}</p>
-                                                    <p className="text-[10px] text-slate-400 font-medium">hours</p>
-                                                </>
+                                                <div className="flex gap-4">
+                                                    <div>
+                                                        <p className="text-base font-bold text-blue-600">{(site.total_hours || 0).toFixed(1)}</p>
+                                                        <p className="text-[10px] text-slate-400 font-medium">hours</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-base font-bold text-indigo-600">{site.total_count}</p>
+                                                        <p className="text-[10px] text-slate-400 font-medium">count</p>
+                                                    </div>
+                                                </div>
                                             ) : (
                                                 <>
                                                     <p className="text-base font-bold text-violet-600">{site.total_count}</p>
@@ -272,6 +278,7 @@ const TaskSummary: React.FC = () => {
                                                                 <>
                                                                     <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">In</th>
                                                                     <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Out</th>
+                                                                    <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider">Count</th>
                                                                 </>
                                                             )}
                                                         </tr>
@@ -304,6 +311,7 @@ const TaskSummary: React.FC = () => {
                                                                     <>
                                                                         <td className="px-4 py-3 text-xs font-mono text-emerald-600 font-semibold">{task.IN_TIME || '—'}</td>
                                                                         <td className="px-4 py-3 text-xs font-mono text-orange-600 font-semibold">{task.OUT_TIME || '—'}</td>
+                                                                        <td className="px-4 py-3 text-right text-sm font-bold font-mono text-indigo-700">{task.COUNT ?? 0}</td>
                                                                     </>
                                                                 )}
                                                             </tr>

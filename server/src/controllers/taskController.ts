@@ -67,6 +67,9 @@ export const getTasks = async (req: Request, res: Response) => {
         if (userRole === 'supervisor') {
             query += ` AND s.supervisor_id = :userId`;
             params.userId = userId;
+        } else if (userRole === 'staff') {
+            query += ` AND t.staff_id = :userId`;
+            params.userId = userId;
         }
 
         if (site_no) {
@@ -318,8 +321,8 @@ export const getTaskSummary = async (req: Request, res: Response) => {
             siteData.staff_ids.add(task.STAFF_ID);
             siteData.tasks.push(task);
 
-            // Aggregate counts for target-based
-            if (task.SITE_OT_TYPE === 'target_based' && task.COUNT) {
+            // Aggregate counts for both target-based and time-based/staff_outsource
+            if (task.COUNT) {
                 siteData.total_count += Number(task.COUNT) || 0;
             }
 

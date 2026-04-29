@@ -65,6 +65,8 @@ export const createAttendance = async (req: Request, res: Response) => {
 
 export const getAttendanceReport = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to } = req.query;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
     try {
         let query = `
         SELECT u.name as staff_name,
@@ -76,6 +78,14 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
         WHERE 1=1
       `;
         const params: any = {};
+
+        if (userRole === 'supervisor') {
+            query += ` AND s.supervisor_id = :userId`;
+            params.userId = userId;
+        } else if (userRole === 'staff') {
+            query += ` AND a.staff_id = :userId`;
+            params.userId = userId;
+        }
 
         if (site_no) {
             query += ` AND s.site_no = :site_no`;

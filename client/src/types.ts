@@ -66,6 +66,7 @@ export interface Attendance {
     IN_TIME: string | null;
     OUT_TIME: string | null;
     STAFF_NAME?: string;
+    SITE_NAME?: string;
     SITE_NO?: string;
     OT_TYPE?: string;
 }

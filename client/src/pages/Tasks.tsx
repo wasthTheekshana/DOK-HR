@@ -573,6 +573,7 @@ const Tasks: React.FC = () => {
                                                                 {site.site_ot_type === 'time_based' && <>
                                                                     <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In</th>
                                                                     <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Out</th>
+                                                                    <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Count</th>
                                                                 </>}
                                                             </tr>
                                                         </thead>
@@ -586,6 +587,7 @@ const Tasks: React.FC = () => {
                                                                     {site.site_ot_type === 'time_based' && <>
                                                                         <td className="px-5 py-3 text-sm font-mono text-emerald-700">{task.IN_TIME || '-'}</td>
                                                                         <td className="px-5 py-3 text-sm font-mono text-orange-700">{task.OUT_TIME || '-'}</td>
+                                                                        <td className="px-5 py-3 text-sm text-right font-mono font-medium text-slate-900">{task.COUNT ?? 0}</td>
                                                                     </>}
                                                                 </tr>
                                                             ))}

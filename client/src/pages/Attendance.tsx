@@ -1,21 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import type { Attendance, Site } from '../types';
 import { format } from 'date-fns';
 import { Calendar, MapPin, Clock, User, CheckCircle, FileText, ClipboardList, BarChart2, AlertCircle, Download, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AttendancePage: React.FC = () => {
+    const { role } = useAuth();
+    const isStaff = role === 'staff';
+
     const [attendance, setAttendance] = useState<Attendance[]>([]);
     const [sites, setSites] = useState<Site[]>([]);
     const [loading, setLoading] = useState(false);
     const [reportData, setReportData] = useState<{ STAFF_NAME: string; DAYS_COUNT: number; EPF_NUMBER: string }[]>([]);
-    const [viewMode, setViewMode] = useState<'log' | 'report' | 'date-report'>('log');
+    const [viewMode, setViewMode] = useState<'log' | 'date-report' | 'report'>('log');
     const [siteFilter, setSiteFilter] = useState('');
     const [dateFrom, setDateFrom] = useState(format(new Date(new Date().setMonth(new Date().getMonth() - 1, 1)), 'yyyy-MM-dd'));
     const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
     useEffect(() => {
+        if (isStaff) return; // staff doesn't need site list
         const loadSites = async () => {
             try {
                 const res = await api.get('/sites');
@@ -24,21 +29,23 @@ const AttendancePage: React.FC = () => {
             } catch (error) { console.error('Failed to load sites', error); }
         };
         loadSites();
-    }, []);
+    }, [isStaff]);
 
     useEffect(() => {
-        if (siteFilter) {
+        if (isStaff) {
+            fetchAttendance();
+        } else if (siteFilter) {
             if (viewMode === 'report') fetchReport();
-            else fetchAttendance(); // log + date-report both use attendance records
+            else fetchAttendance();
         }
-    }, [siteFilter, dateFrom, dateTo, viewMode]);
+    }, [siteFilter, dateFrom, dateTo, viewMode, isStaff]);
 
     const fetchAttendance = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/attendance', {
-                params: { site_no: siteFilter, date_from: dateFrom, date_to: dateTo }
-            });
+            const params: any = { date_from: dateFrom, date_to: dateTo };
+            if (!isStaff && siteFilter) params.site_no = siteFilter;
+            const response = await api.get('/attendance', { params });
             setAttendance(response.data);
         } catch (error) { console.error('Failed to fetch attendance', error); }
         finally { setLoading(false); }
@@ -157,14 +164,17 @@ const AttendancePage: React.FC = () => {
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${viewMode === 'date-report' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                             <CalendarDays className="w-4 h-4" /> Date Report
                         </button>
-                        <button onClick={() => setViewMode('report')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${viewMode === 'report' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                            <BarChart2 className="w-4 h-4" /> Staff Summary
-                        </button>
+                        {!isStaff && (
+                            <button onClick={() => setViewMode('report' as any)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${'report' === viewMode ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                <BarChart2 className="w-4 h-4" /> Staff Summary
+                            </button>
+                        )}
                     </div>
 
                     {/* Filters */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className={`grid grid-cols-1 gap-3 ${isStaff ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+                        {!isStaff && (
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
                             <div className="relative">
@@ -176,6 +186,7 @@ const AttendancePage: React.FC = () => {
                                 </select>
                             </div>
                         </div>
+                        )}
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Date From</label>
                             <div className="relative">
@@ -254,7 +265,7 @@ const AttendancePage: React.FC = () => {
             )}
 
             {/* Content */}
-            {siteFilter ? (
+            {(isStaff || siteFilter) ? (
                 <div className="card overflow-hidden">
                     {loading ? (
                         <div className="p-6 space-y-3">
@@ -277,7 +288,8 @@ const AttendancePage: React.FC = () => {
                                     <thead className="bg-slate-50">
                                         <tr>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
-                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>
+                                            {isStaff && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Site</th>}
+                                            {!isStaff && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>}
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In Time</th>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Out Time</th>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
@@ -286,7 +298,7 @@ const AttendancePage: React.FC = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         {attendance.length === 0 ? (
                                             <tr>
-                                                <td colSpan={5} className="px-6 py-16 text-center">
+                                                <td colSpan={isStaff ? 4 : 5} className="px-6 py-16 text-center">
                                                     <FileText className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                                                     <p className="text-slate-500 font-medium">No attendance records found for this period</p>
                                                 </td>
@@ -305,14 +317,23 @@ const AttendancePage: React.FC = () => {
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-5 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-7 h-7 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">
-                                                                {(att.STAFF_NAME || 'U').charAt(0).toUpperCase()}
+                                                    {isStaff ? (
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                                                <span className="text-sm font-medium text-slate-700">{att.SITE_NAME || att.SITE_NO || '—'}</span>
                                                             </div>
-                                                            <span className="text-sm font-medium text-slate-900">{att.STAFF_NAME || 'Unknown'}</span>
-                                                        </div>
-                                                    </td>
+                                                        </td>
+                                                    ) : (
+                                                        <td className="px-5 py-4 whitespace-nowrap">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-7 h-7 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">
+                                                                    {(att.STAFF_NAME || 'U').charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <span className="text-sm font-medium text-slate-900">{att.STAFF_NAME || 'Unknown'}</span>
+                                                            </div>
+                                                        </td>
+                                                    )}
                                                     <td className="px-5 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-1.5">
                                                             <Clock className="w-3.5 h-3.5 text-emerald-500" />
@@ -492,6 +513,7 @@ const AttendancePage: React.FC = () => {
                     <p className="text-sm text-slate-500">Choose a site above to view attendance records</p>
                 </div>
             )}
+
         </div>
     );
 };
