@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
-import oracledb from 'oracledb';
 
 export const getSites = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
@@ -32,13 +31,11 @@ export const getSites = async (req: Request, res: Response) => {
 
         const siteIds = sites.map((s: any) => s.ID);
         if (siteIds.length > 0) {
-            // Fetch task types
             const taskTypesResult = await execute<any>(
                 `SELECT site_id, task_name, invoice_price FROM site_task_types WHERE site_id IN (${siteIds.join(',')})`
             );
             const taskTypes = taskTypesResult.rows || [];
 
-            // Fetch cost factors
             const costFactorsResult = await execute<any>(
                 `SELECT site_id, factor_key, factor_value FROM cost_varient WHERE site_id IN (${siteIds.join(',')}) ORDER BY id`
             );
@@ -73,14 +70,12 @@ export const getSiteById = async (req: Request, res: Response) => {
 
         const site = result.rows[0];
 
-        // Fetch task types
         const taskTypesResult = await execute<any>(
             `SELECT site_id, task_name, invoice_price FROM site_task_types WHERE site_id = :id`,
             [String(id)]
         );
         (site as any).TASK_TYPES = taskTypesResult.rows || [];
 
-        // Fetch cost factors
         const costFactorsResult = await execute<any>(
             `SELECT site_id, factor_key, factor_value FROM cost_varient WHERE site_id = :id ORDER BY id`,
             [String(id)]
@@ -99,7 +94,8 @@ export const createSite = async (req: Request, res: Response) => {
     try {
         const siteResult = await execute<any>(
             `INSERT INTO sites (site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, service_type, site_type)
-             VALUES (:site_no, :name, :supervisor_id, :task_invoice_price, :daily_target, :ot_type, :service_type, :site_type) RETURNING id INTO :id`,
+             VALUES (:site_no, :name, :supervisor_id, :task_invoice_price, :daily_target, :ot_type, :service_type, :site_type)
+             RETURNING id`,
             {
                 site_no,
                 name,
@@ -109,13 +105,11 @@ export const createSite = async (req: Request, res: Response) => {
                 ot_type: ot_type || 'time_based',
                 service_type: service_type || null,
                 site_type: site_type || null,
-                id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
             }
         );
 
-        const newSiteId = siteResult.outBinds?.id?.[0];
+        const newSiteId = siteResult.rows?.[0]?.ID;
 
-        // Insert Task Types
         if (newSiteId && task_types && Array.isArray(task_types) && task_types.length > 0) {
             for (const task of task_types) {
                 await execute(
@@ -125,7 +119,6 @@ export const createSite = async (req: Request, res: Response) => {
             }
         }
 
-        // Insert Cost Factors
         if (newSiteId && cost_factors && Array.isArray(cost_factors) && cost_factors.length > 0) {
             for (const factor of cost_factors) {
                 if (factor.key && factor.key.trim()) {
@@ -137,7 +130,6 @@ export const createSite = async (req: Request, res: Response) => {
             }
         }
 
-        // Sync Supervisor Site ID
         if (newSiteId && supervisor_id) {
             await execute(
                 `UPDATE users SET site_id = :site_id WHERE id = :user_id`,
@@ -165,7 +157,7 @@ export const updateSite = async (req: Request, res: Response) => {
                  ot_type = :ot_type,
                  service_type = :service_type,
                  site_type = :site_type,
-                 updated_at = SYSTIMESTAMP
+                 updated_at = CURRENT_TIMESTAMP
              WHERE id = :id`,
             {
                 name,
@@ -179,7 +171,6 @@ export const updateSite = async (req: Request, res: Response) => {
             }
         );
 
-        // Update Task Types: delete + re-insert
         if (task_types && Array.isArray(task_types)) {
             await execute(`DELETE FROM site_task_types WHERE site_id = :id`, { id: String(id) });
             for (const task of task_types) {
@@ -190,7 +181,6 @@ export const updateSite = async (req: Request, res: Response) => {
             }
         }
 
-        // Update Cost Factors: delete + re-insert
         await execute(`DELETE FROM cost_varient WHERE site_id = :id`, { id: String(id) });
         if (cost_factors && Array.isArray(cost_factors) && cost_factors.length > 0) {
             for (const factor of cost_factors) {
@@ -203,7 +193,6 @@ export const updateSite = async (req: Request, res: Response) => {
             }
         }
 
-        // Sync Supervisor Site ID
         if (supervisor_id) {
             await execute(
                 `UPDATE users SET site_id = :site_id WHERE id = :user_id`,

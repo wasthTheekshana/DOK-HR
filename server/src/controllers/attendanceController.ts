@@ -30,11 +30,11 @@ export const getAttendance = async (req: Request, res: Response) => {
             params.site_no = String(site_no);
         }
         if (date_from) {
-            query += ` AND a.attendance_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date >= :date_from`;
             params.date_from = String(date_from);
         }
         if (date_to) {
-            query += ` AND a.attendance_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date <= :date_to`;
             params.date_to = String(date_to);
         }
 
@@ -53,7 +53,7 @@ export const createAttendance = async (req: Request, res: Response) => {
     try {
         await execute(
             `INSERT INTO attendance (site_id, staff_id, attendance_date, in_time, out_time)
-             VALUES (:site_id, :staff_id, TO_DATE(:attendance_date, 'YYYY-MM-DD'), :in_time, :out_time)`,
+             VALUES (:site_id, :staff_id, :attendance_date, :in_time, :out_time)`,
             { site_id, staff_id, attendance_date, in_time, out_time }
         );
         res.status(201).json({ message: 'Attendance recorded' });
@@ -70,7 +70,7 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
     try {
         let query = `
         SELECT u.name as staff_name,
-               COUNT(DISTINCT TRUNC(a.attendance_date)) as days_count,
+               COUNT(DISTINCT a.attendance_date) as days_count,
                u.epf_number
         FROM attendance a
         JOIN sites s ON a.site_id = s.id
@@ -92,11 +92,11 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
             params.site_no = String(site_no);
         }
         if (date_from) {
-            query += ` AND a.attendance_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date >= :date_from`;
             params.date_from = String(date_from);
         }
         if (date_to) {
-            query += ` AND a.attendance_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND a.attendance_date <= :date_to`;
             params.date_to = String(date_to);
         }
 

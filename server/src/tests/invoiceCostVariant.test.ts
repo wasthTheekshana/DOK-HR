@@ -11,11 +11,6 @@ jest.mock('../middleware/authMiddleware', () => ({
 }));
 
 jest.mock('../db/dbUtils', () => ({ execute: jest.fn() }));
-jest.mock('oracledb', () => ({
-    BIND_OUT: 'BIND_OUT',
-    NUMBER: 'NUMBER',
-}));
-
 import invoiceRoutes from '../routes/invoiceRoutes';
 import { execute } from '../db/dbUtils';
 
@@ -41,7 +36,7 @@ describe('saveInvoice — cost_variants upsert', () => {
     it('UPDATEs an existing cost variant when the key already exists for the site', async () => {
         mockExecute.mockResolvedValueOnce({ rows: [{ ID: 5 }] });
         mockExecute.mockResolvedValueOnce({ rows: [] });
-        mockExecute.mockResolvedValueOnce({ rows: [], outBinds: { id: [99] } });
+        mockExecute.mockResolvedValueOnce({ rows: [{ ID: 99 }] });
 
         const res = await request(app)
             .post('/api/invoices')
@@ -57,7 +52,7 @@ describe('saveInvoice — cost_variants upsert', () => {
     it('INSERTs a new cost variant when the key does not exist for the site', async () => {
         mockExecute.mockResolvedValueOnce({ rows: [] });
         mockExecute.mockResolvedValueOnce({ rows: [] });
-        mockExecute.mockResolvedValueOnce({ rows: [], outBinds: { id: [100] } });
+        mockExecute.mockResolvedValueOnce({ rows: [{ ID: 100 }] });
 
         const res = await request(app)
             .post('/api/invoices')
@@ -75,7 +70,7 @@ describe('saveInvoice — cost_variants upsert', () => {
         mockExecute.mockResolvedValueOnce({ rows: [] });
         mockExecute.mockResolvedValueOnce({ rows: [] });
         mockExecute.mockResolvedValueOnce({ rows: [] });
-        mockExecute.mockResolvedValueOnce({ rows: [], outBinds: { id: [101] } });
+        mockExecute.mockResolvedValueOnce({ rows: [{ ID: 101 }] });
 
         const res = await request(app)
             .post('/api/invoices')
@@ -94,7 +89,7 @@ describe('saveInvoice — cost_variants upsert', () => {
     });
 
     it('skips variants with empty keys', async () => {
-        mockExecute.mockResolvedValueOnce({ rows: [], outBinds: { id: [102] } });
+        mockExecute.mockResolvedValueOnce({ rows: [{ ID: 102 }] });
 
         const res = await request(app)
             .post('/api/invoices')

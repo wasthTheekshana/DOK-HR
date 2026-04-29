@@ -37,11 +37,11 @@ export const getAssignments = async (req: Request, res: Response) => {
             params.staff_id = Number(staff_id);
         }
         if (date) {
-            query += ` AND TO_DATE(:date, 'YYYY-MM-DD') BETWEEN ta.start_date AND ta.end_date`;
+            query += ` AND :date::date BETWEEN ta.start_date AND ta.end_date`;
             params.date = String(date);
         }
         if (active === '1') {
-            query += ` AND TRUNC(SYSDATE) BETWEEN ta.start_date AND ta.end_date`;
+            query += ` AND CURRENT_DATE BETWEEN ta.start_date AND ta.end_date`;
         }
 
         query += ` ORDER BY ta.start_date DESC`;
@@ -84,8 +84,8 @@ export const createAssignment = async (req: Request, res: Response) => {
         const overlapRes = await execute<any>(
             `SELECT id FROM temporary_assignments
              WHERE staff_id = :staff_id AND site_id = :site_id
-               AND start_date <= TO_DATE(:end_date, 'YYYY-MM-DD')
-               AND end_date   >= TO_DATE(:start_date, 'YYYY-MM-DD')`,
+               AND start_date <= :end_date
+               AND end_date   >= :start_date`,
             { staff_id: Number(staff_id), site_id: Number(site_id), start_date: String(start_date), end_date: String(end_date) }
         );
         if (overlapRes.rows && overlapRes.rows.length > 0) {
@@ -94,7 +94,7 @@ export const createAssignment = async (req: Request, res: Response) => {
 
         await execute<any>(
             `INSERT INTO temporary_assignments (staff_id, site_id, start_date, end_date, note, created_by)
-             VALUES (:staff_id, :site_id, TO_DATE(:start_date,'YYYY-MM-DD'), TO_DATE(:end_date,'YYYY-MM-DD'), :note, :created_by)`,
+             VALUES (:staff_id, :site_id, :start_date, :end_date, :note, :created_by)`,
             {
                 staff_id: Number(staff_id),
                 site_id: Number(site_id),
@@ -139,8 +139,8 @@ export const updateAssignment = async (req: Request, res: Response) => {
         const updates: string[] = [];
         const params: any = { id: Number(id) };
 
-        if (start_date) { updates.push(`start_date = TO_DATE(:start_date, 'YYYY-MM-DD')`); params.start_date = String(start_date); }
-        if (end_date)   { updates.push(`end_date   = TO_DATE(:end_date,   'YYYY-MM-DD')`); params.end_date   = String(end_date); }
+        if (start_date) { updates.push(`start_date = :start_date`); params.start_date = String(start_date); }
+        if (end_date)   { updates.push(`end_date   = :end_date`); params.end_date   = String(end_date); }
         if (note !== undefined) { updates.push(`note = :note`); params.note = note || null; }
 
         if (updates.length === 0) return res.status(400).json({ message: 'No fields to update' });

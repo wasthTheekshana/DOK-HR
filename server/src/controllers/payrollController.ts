@@ -20,7 +20,7 @@ export const getPayroll = async (req: Request, res: Response) => {
             // Fetch poya dates in range to determine day type per row
             const poyaResult = await execute<any>(
                 `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
-                 WHERE poya_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')`,
+                 WHERE poya_date BETWEEN :date_from AND :date_to`,
                 { date_from: String(date_from), date_to: String(date_to) }
             );
             const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => r.POYA_DATE as string));
@@ -34,7 +34,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                 JOIN users u ON t.staff_id = u.id
                 JOIN sites s ON t.site_id = s.id
                 WHERE t.ot_type = 'time_based'
-                AND t.task_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')
+                AND t.task_date BETWEEN :date_from AND :date_to
                 AND u.site_id = t.site_id
             `;
 
@@ -100,7 +100,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                 JOIN sites s ON t.site_id = s.id
                 JOIN users u ON t.staff_id = u.id
                 WHERE t.ot_type = 'target_based'
-                AND t.task_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')
+                AND t.task_date BETWEEN :date_from AND :date_to
                 AND u.site_id = t.site_id
             `;
 
@@ -174,7 +174,7 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
         // Fetch poya dates in range
         const poyaResult = await execute<any>(
             `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
-             WHERE poya_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')`,
+             WHERE poya_date BETWEEN :date_from AND :date_to`,
             { date_from: String(date_from), date_to: String(date_to) }
         );
         const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => r.POYA_DATE as string));
@@ -187,7 +187,7 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
             FROM tasks t
             JOIN sites s ON t.site_id = s.id
             JOIN users u ON t.staff_id = u.id
-            WHERE t.task_date BETWEEN TO_DATE(:date_from, 'YYYY-MM-DD') AND TO_DATE(:date_to, 'YYYY-MM-DD')
+            WHERE t.task_date BETWEEN :date_from AND :date_to
               AND s.ot_type != 'staff_outsource'
         `;
 
@@ -306,7 +306,7 @@ export const saveCustomOTReport = async (req: AuthRequest, res: Response) => {
                     total_extra_hours, total_adjusted_hours, ot_rate, total_payment, saved_by
                 ) VALUES (
                     :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
-                    TO_DATE(:date_from, 'YYYY-MM-DD'), TO_DATE(:date_to, 'YYYY-MM-DD'),
+                    :date_from, :date_to,
                     :calculation_type, :custom_percentage,
                     :total_extra_hours, :total_adjusted_hours, :ot_rate, :total_payment, :saved_by
                 )`,
@@ -355,7 +355,7 @@ export const saveTargetPayroll = async (req: AuthRequest, res: Response) => {
                     date_from, date_to, sum_count, target_count, extra_units, extra_payment, extra_unit_rate, saved_by
                 ) VALUES (
                     :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
-                    TO_DATE(:date_from, 'YYYY-MM-DD'), TO_DATE(:date_to, 'YYYY-MM-DD'),
+                    :date_from, :date_to,
                     :sum_count, :target_count, :extra_units, :extra_payment, :extra_unit_rate, :saved_by
                 )`,
                 {
@@ -402,7 +402,7 @@ export const getSavedPayrollHistory = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (date_from && date_to) {
-            query += ` AND date_from >= TO_DATE(:date_from, 'YYYY-MM-DD') AND date_to <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND date_from >= :date_from AND date_to <= :date_to`;
             params.date_from = String(date_from);
             params.date_to = String(date_to);
         }
@@ -441,7 +441,7 @@ export const getCustomOTHistory = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (date_from && date_to) {
-            query += ` AND date_from >= TO_DATE(:date_from, 'YYYY-MM-DD') AND date_to <= TO_DATE(:date_to, 'YYYY-MM-DD')`;
+            query += ` AND date_from >= :date_from AND date_to <= :date_to`;
             params.date_from = String(date_from);
             params.date_to = String(date_to);
         }

@@ -67,7 +67,7 @@ export const getUsers = async (req: Request, res: Response) => {
                  FROM temporary_assignments ta
                  JOIN users u ON ta.staff_id = u.id
                  WHERE ta.site_id = :site_id
-                   AND TO_DATE(:date_val, 'YYYY-MM-DD') BETWEEN ta.start_date AND ta.end_date
+                   AND :date_val::date BETWEEN ta.start_date AND ta.end_date
                    AND u.status = 'active'`,
                 { site_id: Number(site), date_val: String(date) }
             );
@@ -139,7 +139,10 @@ export const createUser = async (req: Request, res: Response) => {
             }
         );
         res.status(201).json({ message: 'User created' });
-    } catch (err) {
+    } catch (err: any) {
+        if ((err as any)?.code === '23505') {
+            return res.status(400).json({ message: 'User with this EPF number already exists' });
+        }
         console.error('createUser error:', err);
         res.status(500).json({ message: 'Server error' });
     }
@@ -217,7 +220,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
         if (updates.length === 0) return res.json({ message: 'No changes' });
 
-        updates.push('updated_at = SYSTIMESTAMP');
+        updates.push('updated_at = CURRENT_TIMESTAMP');
 
         await execute(
             `UPDATE users SET ${updates.join(', ')} WHERE id = :id`,

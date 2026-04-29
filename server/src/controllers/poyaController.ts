@@ -26,12 +26,12 @@ export const addPoyaDay = async (req: AuthRequest, res: Response) => {
     try {
         await execute(
             `INSERT INTO poya_days (poya_date, description, created_by)
-             VALUES (TO_DATE(:poya_date, 'YYYY-MM-DD'), :description, :created_by)`,
+             VALUES (:poya_date, :description, :created_by)`,
             { poya_date, description: description || null, created_by: req.user?.id ?? null }
         );
         res.json({ message: 'Poya day added' });
     } catch (err: any) {
-        if (err.errorNum === 1) {
+        if (err?.code === '23505') {
             return res.status(409).json({ message: 'This date is already marked as a Poya day' });
         }
         console.error('addPoyaDay error:', err);
@@ -45,12 +45,12 @@ export const updatePoyaDay = async (req: AuthRequest, res: Response) => {
     if (!poya_date) return res.status(400).json({ message: 'poya_date is required (YYYY-MM-DD)' });
     try {
         await execute(
-            `UPDATE poya_days SET poya_date = TO_DATE(:poya_date, 'YYYY-MM-DD'), description = :description WHERE id = :id`,
+            `UPDATE poya_days SET poya_date = :poya_date, description = :description WHERE id = :id`,
             { poya_date, description: description || null, id: Number(id) }
         );
         res.json({ message: 'Poya day updated' });
     } catch (err: any) {
-        if (err.errorNum === 1) return res.status(409).json({ message: 'Another Poya day already exists on that date' });
+        if (err?.code === '23505') return res.status(409).json({ message: 'Another Poya day already exists on that date' });
         console.error('updatePoyaDay error:', err);
         res.status(500).json({ message: 'Server error' });
     }

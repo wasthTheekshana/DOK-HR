@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor } from '../types';
+import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor, InvoiceOutsourceStaffLine } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -39,6 +39,7 @@ const Invoices: React.FC = () => {
     const [preview, setPreview]             = useState<InvoicePreview | null>(null);
     const [editedVariants,  setEditedVariants]  = useState<{ key: string; value: string }[]>([]);
     const [additionalCosts, setAdditionalCosts] = useState<{ key: string; value: string }[]>([]);
+    const [outsourceLines,  setOutsourceLines]  = useState<(InvoiceOutsourceStaffLine & { price: string })[]>([]);
     const [saving, setSaving]               = useState(false);
 
     // ── Edit modal ──
@@ -65,7 +66,7 @@ const Invoices: React.FC = () => {
     const openModal = () => {
         setSelectedSiteId(''); setDateFrom(''); setDateTo('');
         setPreview(null);
-        setEditedVariants([]); setAdditionalCosts([]);
+        setEditedVariants([]); setAdditionalCosts([]); setOutsourceLines([]);
         setIsModalOpen(true);
     };
 
@@ -84,9 +85,20 @@ const Invoices: React.FC = () => {
                 }))
             );
             setAdditionalCosts([]);
+            setOutsourceLines(
+                (data.outsource_staff_lines || []).map((l: InvoiceOutsourceStaffLine) => ({
+                    ...l,
+                    price: '',
+                }))
+            );
         } catch (err: any) { alert(err.response?.data?.message || 'Calculation failed'); }
         finally { setCalculating(false); }
     };
+
+    const outsourceInvoiceTotal = outsourceLines.reduce((s, l) => {
+        const p = parseFloat(l.price) || 0;
+        return s + l.ATTEND_COUNT * p;
+    }, 0);
 
     const handleSave = async () => {
         if (!preview) return;
@@ -96,6 +108,7 @@ const Invoices: React.FC = () => {
             if (isNaN(n) || n < 0) { alert('Each additional cost must have a valid amount (≥ 0).'); return; }
         }
         setSaving(true);
+        const isOutsource = preview.site.OT_TYPE === 'staff_outsource';
         try {
             const allVariants = [
                 ...editedVariants,
@@ -109,7 +122,7 @@ const Invoices: React.FC = () => {
                 date_to:          preview.date_to,
                 cost_variants:    allVariants,
                 salary_ot_amount: preview.salary_ot_amount,
-                invoice_price:    preview.total_invoice_price,
+                invoice_price:    isOutsource ? outsourceInvoiceTotal : preview.total_invoice_price,
             });
             setIsModalOpen(false); fetchInvoices();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to save invoice'); }
@@ -239,21 +252,37 @@ const Invoices: React.FC = () => {
         });
         y = getY();
 
-        // 4. Task Calculation
-        sectionTitle('4. Invoice Price — Task Calculation', 4, 120, 87);
-        autoTable(doc, {
-            startY: y,
-            head: [['Task Type', 'Count', 'Unit Price (Rs.)', 'Line Total (Rs.)']],
-            body: data.task_lines.length > 0
-                ? data.task_lines.map(t => [t.TASK_NAME, Number(t.TOTAL_COUNT).toLocaleString(), fmtN(t.UNIT_PRICE), fmtN(t.LINE_TOTAL)])
-                : [['No task types defined', '', '', '']],
-            foot: [['', '', 'Total Invoice Price', fmtN(data.total_invoice_price)]],
-            theme: 'striped',
-            headStyles: { fillColor: [4, 120, 87] },
-            footStyles: { fillColor: [209, 250, 229], textColor: [6, 78, 59], fontStyle: 'bold' },
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-            margin: { left: 14, right: 14 },
-        });
+        // 4. Task Calculation / Outsource Staff Attendance
+        const isOutsourcePDF = data.site.OT_TYPE === 'staff_outsource';
+        if (isOutsourcePDF && data.outsource_staff_lines && data.outsource_staff_lines.length > 0) {
+            sectionTitle('4. Outsource Staff Attendance', 4, 120, 87);
+            autoTable(doc, {
+                startY: y,
+                head: [['Staff', 'Attendance Days', 'Invoice Price (Rs.)']],
+                body: data.outsource_staff_lines.map(l => [l.NAME, Number(l.ATTEND_COUNT).toLocaleString(), fmtN(inv.INVOICE_PRICE / (data.outsource_staff_lines!.length || 1))]),
+                foot: [['', 'Total Invoice Price', fmtN(inv.INVOICE_PRICE)]],
+                theme: 'striped',
+                headStyles: { fillColor: [4, 120, 87] },
+                footStyles: { fillColor: [209, 250, 229], textColor: [6, 78, 59], fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+                margin: { left: 14, right: 14 },
+            });
+        } else {
+            sectionTitle('4. Invoice Price — Task Calculation', 4, 120, 87);
+            autoTable(doc, {
+                startY: y,
+                head: [['Task Type', 'Count', 'Unit Price (Rs.)', 'Line Total (Rs.)']],
+                body: data.task_lines.length > 0
+                    ? data.task_lines.map(t => [t.TASK_NAME, Number(t.TOTAL_COUNT).toLocaleString(), fmtN(t.UNIT_PRICE), fmtN(t.LINE_TOTAL)])
+                    : [['No task types defined', '', '', '']],
+                foot: [['', '', 'Total Invoice Price', fmtN(data.total_invoice_price)]],
+                theme: 'striped',
+                headStyles: { fillColor: [4, 120, 87] },
+                footStyles: { fillColor: [209, 250, 229], textColor: [6, 78, 59], fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+                margin: { left: 14, right: 14 },
+            });
+        }
         y = getY();
 
         // 5. Summary (saved amounts)
@@ -298,10 +327,19 @@ const Invoices: React.FC = () => {
             ['Total OT',             data.total_ot],
             ['Salary + OT Combined', data.salary_ot_amount],
             [],
-            ['4. INVOICE PRICE — TASK CALCULATION'],
-            ['Task Type', 'Count', 'Unit Price (Rs.)', 'Line Total (Rs.)'],
-            ...data.task_lines.map(t => [t.TASK_NAME, t.TOTAL_COUNT, t.UNIT_PRICE, t.LINE_TOTAL]),
-            ['', '', 'Total Invoice Price', data.total_invoice_price],
+            ...(data.site.OT_TYPE === 'staff_outsource' && data.outsource_staff_lines && data.outsource_staff_lines.length > 0
+                ? [
+                    ['4. OUTSOURCE STAFF ATTENDANCE'],
+                    ['Staff', 'Attendance Days'],
+                    ...data.outsource_staff_lines.map(l => [l.NAME, l.ATTEND_COUNT]),
+                    ['Total Invoice Price', inv.INVOICE_PRICE],
+                  ]
+                : [
+                    ['4. INVOICE PRICE — TASK CALCULATION'],
+                    ['Task Type', 'Count', 'Unit Price (Rs.)', 'Line Total (Rs.)'],
+                    ...data.task_lines.map(t => [t.TASK_NAME, t.TOTAL_COUNT, t.UNIT_PRICE, t.LINE_TOTAL]),
+                    ['', '', 'Total Invoice Price', data.total_invoice_price],
+                  ]),
             [],
             ['5. SUMMARY (SAVED AMOUNTS)'],
             ['Cost Variant Amount',   inv.COST_VARIANT_AMOUNT],
@@ -571,7 +609,7 @@ const Invoices: React.FC = () => {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-xs text-indigo-200">Total Invoice</p>
-                                            <p className="font-black text-lg">{fmt(preview.total_invoice_price)}</p>
+                                            <p className="font-black text-lg">{fmt(preview.site.OT_TYPE === 'staff_outsource' ? outsourceInvoiceTotal : preview.total_invoice_price)}</p>
                                         </div>
                                     </div>
 
@@ -720,42 +758,88 @@ const Invoices: React.FC = () => {
                                         </div>
                                     </SectionCard>
 
-                                    <SectionCard title="Invoice Price — Task Calculation" accent="border-emerald-400"
-                                        icon={<DollarSign className="w-4 h-4 text-emerald-500" />}>
-                                        {preview.task_lines.length === 0
-                                            ? <p className="text-slate-400 text-sm">No task types defined. Add Task Types &amp; Prices in Site settings first.</p>
-                                            : (
-                                                <table className="w-full text-sm">
-                                                    <thead><tr className="border-b border-slate-100">
-                                                        <th className="pb-2 text-left text-xs font-semibold text-slate-500">Task Type</th>
-                                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Count</th>
-                                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Unit Price</th>
-                                                        <th className="pb-2 text-right text-xs font-semibold text-slate-500">Line Total</th>
-                                                    </tr></thead>
-                                                    <tbody className="divide-y divide-slate-50">
-                                                        {preview.task_lines.map((t, i) => (
-                                                            <tr key={i} className={Number(t.TOTAL_COUNT) === 0 ? 'opacity-40' : ''}>
-                                                                <td className="py-2 text-slate-700 font-medium">{t.TASK_NAME}</td>
-                                                                <td className="py-2 text-right text-slate-500">{Number(t.TOTAL_COUNT).toLocaleString()}</td>
-                                                                <td className="py-2 text-right text-slate-500">{fmt(t.UNIT_PRICE)}</td>
-                                                                <td className="py-2 text-right font-semibold text-emerald-700">{fmt(t.LINE_TOTAL)}</td>
+                                    {preview.site.OT_TYPE === 'staff_outsource' && outsourceLines.length > 0 ? (
+                                        <SectionCard title="Outsource Staff Invoice Pricing" accent="border-emerald-400"
+                                            icon={<DollarSign className="w-4 h-4 text-emerald-500" />}>
+                                            <table className="w-full text-sm">
+                                                <thead><tr className="border-b border-slate-100">
+                                                    <th className="pb-2 text-left text-xs font-semibold text-slate-500">Staff</th>
+                                                    <th className="pb-2 text-right text-xs font-semibold text-slate-500">Attend Days</th>
+                                                    <th className="pb-2 text-right text-xs font-semibold text-slate-500">Price (Rs.)</th>
+                                                    <th className="pb-2 text-right text-xs font-semibold text-slate-500">Line Total</th>
+                                                </tr></thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                    {outsourceLines.map((l, i) => {
+                                                        const p = parseFloat(l.price) || 0;
+                                                        const lineTotal = l.ATTEND_COUNT * p;
+                                                        return (
+                                                            <tr key={l.ID} className={l.ATTEND_COUNT === 0 ? 'opacity-40' : ''}>
+                                                                <td className="py-2 text-slate-700 font-medium">{l.NAME}</td>
+                                                                <td className="py-2 text-right text-slate-500">{l.ATTEND_COUNT.toLocaleString()}</td>
+                                                                <td className="py-2 text-right">
+                                                                    <input
+                                                                        type="number" min="0" step="any"
+                                                                        placeholder="0.00"
+                                                                        value={l.price}
+                                                                        onChange={e => {
+                                                                            const val = e.target.value;
+                                                                            setOutsourceLines(prev =>
+                                                                                prev.map((x, j) => j === i ? { ...x, price: val } : x)
+                                                                            );
+                                                                        }}
+                                                                        onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                                                        className="form-input w-28 px-2 py-1 text-sm text-right"
+                                                                    />
+                                                                </td>
+                                                                <td className="py-2 text-right font-semibold text-emerald-700">{fmt(lineTotal)}</td>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                    <tfoot><tr className="border-t-2 border-emerald-200">
-                                                        <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Invoice Price</td>
-                                                        <td className="pt-2.5 text-right font-black text-emerald-700">{fmt(preview.total_invoice_price)}</td>
-                                                    </tr></tfoot>
-                                                </table>
-                                            )}
-                                    </SectionCard>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                                <tfoot><tr className="border-t-2 border-emerald-200">
+                                                    <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Invoice Price</td>
+                                                    <td className="pt-2.5 text-right font-black text-emerald-700">{fmt(outsourceInvoiceTotal)}</td>
+                                                </tr></tfoot>
+                                            </table>
+                                        </SectionCard>
+                                    ) : (
+                                        <SectionCard title="Invoice Price — Task Calculation" accent="border-emerald-400"
+                                            icon={<DollarSign className="w-4 h-4 text-emerald-500" />}>
+                                            {preview.task_lines.length === 0
+                                                ? <p className="text-slate-400 text-sm">No task types defined. Add Task Types &amp; Prices in Site settings first.</p>
+                                                : (
+                                                    <table className="w-full text-sm">
+                                                        <thead><tr className="border-b border-slate-100">
+                                                            <th className="pb-2 text-left text-xs font-semibold text-slate-500">Task Type</th>
+                                                            <th className="pb-2 text-right text-xs font-semibold text-slate-500">Count</th>
+                                                            <th className="pb-2 text-right text-xs font-semibold text-slate-500">Unit Price</th>
+                                                            <th className="pb-2 text-right text-xs font-semibold text-slate-500">Line Total</th>
+                                                        </tr></thead>
+                                                        <tbody className="divide-y divide-slate-50">
+                                                            {preview.task_lines.map((t, i) => (
+                                                                <tr key={i} className={Number(t.TOTAL_COUNT) === 0 ? 'opacity-40' : ''}>
+                                                                    <td className="py-2 text-slate-700 font-medium">{t.TASK_NAME}</td>
+                                                                    <td className="py-2 text-right text-slate-500">{Number(t.TOTAL_COUNT).toLocaleString()}</td>
+                                                                    <td className="py-2 text-right text-slate-500">{fmt(t.UNIT_PRICE)}</td>
+                                                                    <td className="py-2 text-right font-semibold text-emerald-700">{fmt(t.LINE_TOTAL)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                        <tfoot><tr className="border-t-2 border-emerald-200">
+                                                            <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Invoice Price</td>
+                                                            <td className="pt-2.5 text-right font-black text-emerald-700">{fmt(preview.total_invoice_price)}</td>
+                                                        </tr></tfoot>
+                                                    </table>
+                                                )}
+                                        </SectionCard>
+                                    )}
 
                                     <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
                                         <div className="grid grid-cols-3 gap-2 pt-1">
                                             {[
-                                                { label: 'Cost Variants', val: computedCostVariantTotal,       color: 'text-amber-700' },
-                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,       color: 'text-violet-700' },
-                                                { label: 'Invoice Price', val: preview.total_invoice_price,    color: 'text-emerald-700' },
+                                                { label: 'Cost Variants', val: computedCostVariantTotal,                                                                              color: 'text-amber-700' },
+                                                { label: 'Salary + OT',   val: preview.salary_ot_amount,                                                                              color: 'text-violet-700' },
+                                                { label: 'Invoice Price', val: preview.site.OT_TYPE === 'staff_outsource' ? outsourceInvoiceTotal : preview.total_invoice_price,      color: 'text-emerald-700' },
                                             ].map(c => (
                                                 <div key={c.label} className="bg-slate-50 rounded-xl p-3 text-center">
                                                     <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">{c.label}</p>
