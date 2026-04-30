@@ -1,16 +1,46 @@
 version: '3.8'
 
 services:
-  oracle-xe:
-    image: container-registry.oracle.com/database/express:latest
-    container_name: oracle-xe
-    ports:
-      - "1521:1521"
-      - "8080:8080"
-    environment:
-      - ORACLE_PWD=password123
+  postgres:
+    image: postgres:16-alpine
+    expose:
+      - "5432"
     volumes:
-      - oracle_data:/opt/oracle/oradata
+      - pg_data:/var/lib/postgresql/data
+      - ./server/src/db/schema_postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dok-hr:
+    build: ./server
+    expose:
+      - "5000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
+  client:
+    build: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - dok-hr
+    restart: always
 
 volumes:
-  oracle_data:
+  pg_data:
