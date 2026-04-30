@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
 
   postgres:
@@ -14,6 +12,8 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
+    networks:
+      - dokhr-net
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
@@ -31,7 +31,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - DB_HOST=postgres-hr
+      - DB_HOST=postgres        # fix: service name not container name
+    networks:
+      - dokhr-net
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,9 +44,19 @@ services:
     container_name: dok-hr-client
     expose:
       - "80"
+    networks:
+      - dokhr-net
+      - shared-nginx            # add: main Nginx reaches client here
     depends_on:
       - dok-hr
     restart: always
+
+networks:
+  dokhr-net:
+    name: dokhr-net
+  shared-nginx:
+    name: shared-nginx
+    external: false
 
 volumes:
   pg_data:
