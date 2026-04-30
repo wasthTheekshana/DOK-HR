@@ -1,24 +1,29 @@
-import oracledb from 'oracledb';
+import { Pool, types } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const dbConfig = {
-    user: process.env.DB_USER || 'system',
-    password: process.env.DB_PASSWORD || 'your_password',
-    connectString: process.env.DB_CONNECT_STRING || 'localhost:1521/XE',
-};
+// pg returns bigint (20) and numeric/decimal (1700) as strings by default.
+// Parse them as JS numbers so aggregations (COUNT, SUM) work correctly.
+types.setTypeParser(20,   val => parseInt(val, 10));   // bigint
+types.setTypeParser(1700, val => parseFloat(val));      // numeric / decimal
+
+let pool: Pool;
 
 export async function initializeDb() {
+    pool = new Pool({
+        host:     process.env.DB_HOST     || 'localhost',
+        port:     Number(process.env.DB_PORT || 5432),
+        database: process.env.DB_NAME     || 'dok_hr',
+        user:     process.env.DB_USER     || 'dokcrm',
+        password: process.env.DB_PASSWORD || '',
+        max:      10,
+        idleTimeoutMillis: 30000,
+    });
+
     try {
-        await oracledb.createPool({
-            user: dbConfig.user,
-            password: dbConfig.password,
-            connectString: dbConfig.connectString,
-            poolMin: 2,
-            poolMax: 10,
-            poolIncrement: 2,
-        });
+        const client = await pool.connect();
+        client.release();
         console.log('Database pool created');
     } catch (err) {
         console.error('Error creating database pool', err);
@@ -27,14 +32,12 @@ export async function initializeDb() {
 }
 
 export async function closeDb() {
-    try {
-        await oracledb.getPool().close(10);
+    if (pool) {
+        await pool.end();
         console.log('Database pool closed');
-    } catch (err) {
-        console.error('Error closing database pool', err);
     }
 }
 
-export function getPool() {
-    return oracledb.getPool();
+export function getPool(): Pool {
+    return pool;
 }

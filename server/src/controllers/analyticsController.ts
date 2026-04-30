@@ -77,43 +77,39 @@ export const getTaskAnalytics = async (req: Request, res: Response) => {
 
     try {
         const [dailyRes, siteProductRes, topPerfRes, achieveRes] = await Promise.all([
-            // Daily task count (last 30 days by default)
             execute<any>(
-                `SELECT TO_CHAR(TRUNC(task_date), 'YYYY-MM-DD') as task_day, COUNT(*) as total_tasks
+                `SELECT TO_CHAR(task_date, 'YYYY-MM-DD') as task_day, COUNT(*) as total_tasks
                  FROM tasks
-                 WHERE task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
-                 GROUP BY TRUNC(task_date)
-                 ORDER BY TRUNC(task_date)`,
+                 WHERE task_date >= :d_from
+                   AND task_date <= :d_to
+                 GROUP BY task_date
+                 ORDER BY task_date`,
                 { d_from: from, d_to: to }
             ),
-            // Site productivity
             execute<any>(
                 `SELECT s.name as site_name, s.site_no,
                     COUNT(t.id) as task_count,
-                    NVL(SUM(t.count), 0) as total_count
+                    COALESCE(SUM(t.count), 0) as total_count
                  FROM tasks t
                  JOIN sites s ON t.site_id = s.id
-                 WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY s.name, s.site_no
                  ORDER BY task_count DESC`,
                 { d_from: from, d_to: to }
             ),
-            // Top 10 performers (target_based)
             execute<any>(
                 `SELECT u.name as staff_name, SUM(t.count) as total_count
                  FROM tasks t
                  JOIN users u ON t.staff_id = u.id
                  WHERE t.ot_type = 'target_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY u.name
                  ORDER BY total_count DESC
-                 FETCH FIRST 10 ROWS ONLY`,
+                 LIMIT 10`,
                 { d_from: from, d_to: to }
             ),
-            // Target achievement
             execute<any>(
                 `SELECT u.name as staff_name,
                     SUM(t.count) as actual_count,
@@ -124,11 +120,11 @@ export const getTaskAnalytics = async (req: Request, res: Response) => {
                  FROM tasks t
                  JOIN users u ON t.staff_id = u.id
                  WHERE t.ot_type = 'target_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY u.name
                  ORDER BY achievement_pct DESC
-                 FETCH FIRST 15 ROWS ONLY`,
+                 LIMIT 15`,
                 { d_from: from, d_to: to }
             )
         ]);
@@ -171,71 +167,66 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
 
     try {
         const [monthlyRes, siteMonthlyRes, avgHoursRes, lateStayRes] = await Promise.all([
-            // Monthly attendance trend — from attendance table
             execute<any>(
                 `SELECT TO_CHAR(a.attendance_date, 'YYYY-MM') as month,
                     COUNT(*) as attendance_count
                  FROM attendance a
-                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE a.attendance_date >= :d_from
+                   AND a.attendance_date <= :d_to
                  GROUP BY TO_CHAR(a.attendance_date, 'YYYY-MM')
                  ORDER BY month`,
                 { d_from: from, d_to: to }
             ),
-            // Site-wise monthly attendance trend — from attendance table
             execute<any>(
                 `SELECT TO_CHAR(a.attendance_date, 'YYYY-MM') as month,
                     s.site_no,
                     COUNT(*) as attendance_count
                  FROM attendance a
                  JOIN sites s ON a.site_id = s.id
-                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE a.attendance_date >= :d_from
+                   AND a.attendance_date <= :d_to
                  GROUP BY TO_CHAR(a.attendance_date, 'YYYY-MM'), s.site_no
                  ORDER BY month, s.site_no`,
                 { d_from: from, d_to: to }
             ),
-            // Average working hours per employee (only where in/out times exist — time_based sites)
             execute<any>(
                 `SELECT u.name as staff_name,
                     ROUND(AVG(
                         CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
-                        THEN (TO_NUMBER(SUBSTR(a.out_time, 1, 2)) + TO_NUMBER(SUBSTR(a.out_time, 4, 2))/60)
-                           - (TO_NUMBER(SUBSTR(a.in_time, 1, 2)) + TO_NUMBER(SUBSTR(a.in_time, 4, 2))/60)
+                        THEN (SUBSTRING(a.out_time, 1, 2)::numeric + SUBSTRING(a.out_time, 4, 2)::numeric/60)
+                           - (SUBSTRING(a.in_time,  1, 2)::numeric + SUBSTRING(a.in_time,  4, 2)::numeric/60)
                         ELSE NULL END
                     ), 2) as avg_hours
                  FROM attendance a
                  JOIN users u ON a.staff_id = u.id
-                 WHERE a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE a.attendance_date >= :d_from
+                   AND a.attendance_date <= :d_to
                  GROUP BY u.name
                  HAVING AVG(
                     CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
-                    THEN (TO_NUMBER(SUBSTR(a.out_time, 1, 2)) + TO_NUMBER(SUBSTR(a.out_time, 4, 2))/60)
-                       - (TO_NUMBER(SUBSTR(a.in_time, 1, 2)) + TO_NUMBER(SUBSTR(a.in_time, 4, 2))/60)
+                    THEN (SUBSTRING(a.out_time, 1, 2)::numeric + SUBSTRING(a.out_time, 4, 2)::numeric/60)
+                       - (SUBSTRING(a.in_time,  1, 2)::numeric + SUBSTRING(a.in_time,  4, 2)::numeric/60)
                     ELSE NULL END
                  ) IS NOT NULL
                  ORDER BY avg_hours DESC
-                 FETCH FIRST 15 ROWS ONLY`,
+                 LIMIT 15`,
                 { d_from: from, d_to: to }
             ),
-            // Late stay analysis (out_time >= 17:00)
             execute<any>(
                 `SELECT u.name as staff_name, COUNT(*) as late_count
                  FROM attendance a
                  JOIN users u ON a.staff_id = u.id
                  WHERE a.out_time IS NOT NULL
-                   AND TO_NUMBER(SUBSTR(a.out_time, 1, 2)) >= 17
-                   AND a.attendance_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND a.attendance_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND SUBSTRING(a.out_time, 1, 2)::integer >= 17
+                   AND a.attendance_date >= :d_from
+                   AND a.attendance_date <= :d_to
                  GROUP BY u.name
                  ORDER BY late_count DESC
-                 FETCH FIRST 15 ROWS ONLY`,
+                 LIMIT 15`,
                 { d_from: from, d_to: to }
             )
         ]);
 
-        // Pivot site-wise monthly attendance into { month, SITE_A: count, ... }
         const siteMonthMap = new Map<string, any>();
         const siteSet = new Set<string>();
         (siteMonthlyRes.rows || []).forEach((r: any) => {
@@ -280,36 +271,33 @@ export const getPayrollAnalytics = async (req: Request, res: Response) => {
 
     try {
         const [summaryRes, monthlyOTRes, sitePayrollRes, targetOTRes, timeOTRes] = await Promise.all([
-            // Salary summary
             execute<any>(
                 `SELECT
-                    NVL(SUM(CASE WHEN status = 'active' THEN basic_salary END), 0) as total_basic_salary,
-                    NVL(SUM(CASE WHEN status = 'active' AND role = 'staff' THEN basic_salary END), 0) as staff_basic,
+                    COALESCE(SUM(CASE WHEN status = 'active' THEN basic_salary END), 0) as total_basic_salary,
+                    COALESCE(SUM(CASE WHEN status = 'active' AND role = 'staff' THEN basic_salary END), 0) as staff_basic,
                     COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count
                  FROM users`,
                 []
             ),
-            // Monthly OT payment trend (target-based from tasks, time-based from custom_ot_records via saved_at month)
             execute<any>(
                 `SELECT TO_CHAR(t.task_date, 'YYYY-MM') as month,
-                    ROUND(NVL(SUM(
+                    ROUND(COALESCE(SUM(
                         CASE WHEN t.ot_type = 'target_based'
-                        THEN GREATEST(0, NVL(t.count,0) - NVL(t.target,0)) * :extra_rate1
+                        THEN GREATEST(0, COALESCE(t.count,0) - COALESCE(t.target,0)) * :extra_rate1
                         ELSE 0 END
                     ), 0), 2) as ot_payment,
                     COUNT(DISTINCT t.staff_id) as staff_count
                  FROM tasks t
                  WHERE t.ot_type = 'target_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM')
                  ORDER BY month`,
                 { d_from: from, d_to: to, extra_rate1: EXTRA_UNIT_RATE }
             ),
-            // Payroll by site (basic salary)
             execute<any>(
                 `SELECT s.name as site_name, s.site_no,
-                    NVL(SUM(u.basic_salary), 0) as total_salary,
+                    COALESCE(SUM(u.basic_salary), 0) as total_salary,
                     COUNT(u.id) as staff_count
                  FROM sites s
                  LEFT JOIN users u ON u.site_id = s.id AND u.status = 'active' AND u.role = 'staff'
@@ -317,25 +305,23 @@ export const getPayrollAnalytics = async (req: Request, res: Response) => {
                  ORDER BY total_salary DESC`,
                 []
             ),
-            // Target-based OT: SUM(extra_payment) per site from payroll_saved_records
             execute<any>(
                 `SELECT site_no, MAX(site_name) as site_name,
-                    ROUND(NVL(SUM(extra_payment), 0), 2) as target_ot_payment,
+                    ROUND(COALESCE(SUM(extra_payment), 0), 2) as target_ot_payment,
                     COUNT(DISTINCT staff_id) as target_staff
                  FROM payroll_saved_records
-                 WHERE date_from >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND date_to <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE date_from >= :d_from
+                   AND date_to <= :d_to
                  GROUP BY site_no`,
                 { d_from: from, d_to: to }
             ),
-            // Time-based OT: SUM(total_payment) per site from custom_ot_records
             execute<any>(
                 `SELECT site_no, MAX(site_name) as site_name,
-                    ROUND(NVL(SUM(total_payment), 0), 2) as time_ot_payment,
+                    ROUND(COALESCE(SUM(total_payment), 0), 2) as time_ot_payment,
                     COUNT(DISTINCT staff_id) as time_staff
                  FROM custom_ot_records
-                 WHERE date_from >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND date_to <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE date_from >= :d_from
+                   AND date_to <= :d_to
                    AND site_no IS NOT NULL
                  GROUP BY site_no`,
                 { d_from: from, d_to: to }
@@ -345,7 +331,6 @@ export const getPayrollAnalytics = async (req: Request, res: Response) => {
         const summary = summaryRes.rows?.[0] || {};
         const totalBasic = Number(summary.TOTAL_BASIC_SALARY) || 0;
 
-        // Merge target-based and time-based OT by site_no
         const targetOTMap = new Map((targetOTRes.rows || []).map((r: any) => [String(r.SITE_NO), r]));
         const timeOTMap = new Map((timeOTRes.rows || []).map((r: any) => [String(r.SITE_NO), r]));
         const allSiteNos = new Set([...targetOTMap.keys(), ...timeOTMap.keys()]);
@@ -418,65 +403,59 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
         }
         const workingDays = computeWorkingDays(from, to);
         const [siteBaseRes, siteTaskRes, siteAttendRes, timeOTRes, targetOTRes] = await Promise.all([
-            // Site base info: staff counts + salary (no date filter)
             execute<any>(
                 `SELECT s.id as site_id, s.name as site_name, s.site_no,
                     s.daily_target,
                     COUNT(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.id END) as active_staff,
                     COUNT(CASE WHEN u.role = 'staff' THEN u.id END) as total_staff,
                     COUNT(CASE WHEN u.role = 'supervisor' THEN u.id END) as supervisor_count,
-                    NVL(SUM(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.basic_salary END), 0) as total_salary
+                    COALESCE(SUM(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.basic_salary END), 0) as total_salary
                  FROM sites s
                  LEFT JOIN users u ON u.site_id = s.id
                  GROUP BY s.id, s.name, s.site_no, s.daily_target
                  ORDER BY s.site_no`,
                 []
             ),
-            // Site task summary for the selected period (units, target, workers — no OT calc)
             execute<any>(
                 `SELECT t.site_id,
                     COUNT(t.id) as task_records,
-                    NVL(SUM(t.count), 0) as total_units,
+                    COALESCE(SUM(t.count), 0) as total_units,
                     COUNT(DISTINCT t.staff_id) as active_workers
                  FROM tasks t
-                 WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY t.site_id`,
                 { d_from: from, d_to: to }
             ),
-            // Attendance by site — derived from tasks table
             execute<any>(
                 `SELECT t.site_id,
                     COUNT(t.id) as attendance_count,
                     COUNT(DISTINCT t.staff_id) as unique_attendees
                  FROM tasks t
-                 WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY t.site_id`,
                 { d_from: from, d_to: to }
             ),
-            // Time-based OT: SUM(total_payment) per site from custom_ot_records
             execute<any>(
-                `SELECT site_no, ROUND(NVL(SUM(total_payment), 0), 2) as time_ot
+                `SELECT site_no, ROUND(COALESCE(SUM(total_payment), 0), 2) as time_ot
                  FROM custom_ot_records
-                 WHERE date_from >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND date_to <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE date_from >= :d_from
+                   AND date_to <= :d_to
                    AND site_no IS NOT NULL
                  GROUP BY site_no`,
                 { d_from: from, d_to: to }
             ),
-            // Target-based OT: SUM(extra_payment) per site from payroll_saved_records
             execute<any>(
-                `SELECT site_no, ROUND(NVL(SUM(extra_payment), 0), 2) as target_ot
+                `SELECT site_no, ROUND(COALESCE(SUM(extra_payment), 0), 2) as target_ot
                  FROM payroll_saved_records
-                 WHERE date_from >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND date_to <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                 WHERE date_from >= :d_from
+                   AND date_to <= :d_to
                  GROUP BY site_no`,
                 { d_from: from, d_to: to }
             )
         ]);
 
-        // Build lookup maps
         const taskMap = new Map((siteTaskRes.rows || []).map((r: any) => [r.SITE_ID, r]));
         const attendMap = new Map((siteAttendRes.rows || []).map((r: any) => [r.SITE_ID, r]));
         const timeOTMap = new Map((timeOTRes.rows || []).map((r: any) => [String(r.SITE_NO), Number(r.TIME_OT) || 0]));
@@ -534,17 +513,16 @@ export const getSiteCountTrend = async (req: Request, res: Response) => {
         const result = await execute<any>(
             `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD') as task_date,
                     s.site_no,
-                    NVL(SUM(NVL(t.count, 0)), 0) as total_count
+                    COALESCE(SUM(COALESCE(t.count, 0)), 0) as total_count
              FROM tasks t
              JOIN sites s ON t.site_id = s.id
-             WHERE t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-               AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+             WHERE t.task_date >= :d_from
+               AND t.task_date <= :d_to
              GROUP BY TO_CHAR(t.task_date, 'YYYY-MM-DD'), s.site_no
              ORDER BY task_date, s.site_no`,
             { d_from: from, d_to: to }
         );
 
-        // Pivot rows into { date, SITE_A: count, SITE_B: count, ... }
         const dateMap = new Map<string, any>();
         const siteSet = new Set<string>();
 
@@ -588,8 +566,8 @@ export const getPerformanceAnalytics = async (req: Request, res: Response) => {
              FROM tasks t
              JOIN users u ON t.staff_id = u.id
              WHERE t.ot_type = 'target_based'
-               AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-               AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+               AND t.task_date >= :d_from
+               AND t.task_date <= :d_to
              GROUP BY u.name
              ORDER BY achievement_pct DESC`,
             { d_from: from, d_to: to }
@@ -636,44 +614,41 @@ export const getSitePerformanceAnalysis = async (req: Request, res: Response) =>
 
     try {
         const [dailyRes, staffRes, siteInfoRes] = await Promise.all([
-            // Daily actual vs target count for the site
             execute<any>(
                 `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD') as task_date,
-                    NVL(SUM(NVL(t.count, 0)), 0) as actual_count,
+                    COALESCE(SUM(COALESCE(t.count, 0)), 0) as actual_count,
                     MAX(s.daily_target) as target_count
                  FROM tasks t
                  JOIN sites s ON t.site_id = s.id
                  WHERE t.site_id = :site_id
                    AND t.ot_type = 'target_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM-DD')
                  ORDER BY task_date`,
                 { site_id: Number(site_id), d_from: from, d_to: to }
             ),
-            // Per-staff breakdown for the site
             execute<any>(
                 `SELECT u.name as staff_name, u.epf_number,
-                    NVL(SUM(NVL(t.count, 0)), 0) as sum_count,
+                    COALESCE(SUM(COALESCE(t.count, 0)), 0) as sum_count,
                     MAX(s.daily_target) * 22 as total_target,
                     CASE WHEN MAX(s.daily_target) = 0 THEN 0
-                         ELSE GREATEST(0, NVL(SUM(NVL(t.count, 0)), 0) - MAX(s.daily_target) * 22)
+                         ELSE GREATEST(0, COALESCE(SUM(COALESCE(t.count, 0)), 0) - MAX(s.daily_target) * 22)
                     END as extra_units,
                     CASE WHEN MAX(s.daily_target) * 22 > 0
-                         THEN ROUND(NVL(SUM(NVL(t.count, 0)), 0) / (MAX(s.daily_target) * 22) * 100, 1)
+                         THEN ROUND(COALESCE(SUM(COALESCE(t.count, 0)), 0) / (MAX(s.daily_target) * 22) * 100, 1)
                          ELSE 0 END as achievement_pct
                  FROM tasks t
                  JOIN sites s ON t.site_id = s.id
                  JOIN users u ON t.staff_id = u.id
                  WHERE t.site_id = :site_id
                    AND t.ot_type = 'target_based'
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to, 'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY u.name, u.epf_number
                  ORDER BY achievement_pct DESC`,
                 { site_id: Number(site_id), d_from: from, d_to: to }
             ),
-            // Site info
             execute<any>(
                 `SELECT id, site_no, name, daily_target, ot_type FROM sites WHERE id = :site_id`,
                 { site_id: Number(site_id) }
@@ -724,7 +699,7 @@ export const getSitePerformanceAnalysis = async (req: Request, res: Response) =>
     }
 };
 
-// ─── Site Profitability Analytics (by Service Type / Site Type / OT Type) ──
+// ─── Site Profitability Analytics ────────────────────────────────────────────
 
 function groupBySiteKey(
     sites: any[],
@@ -749,13 +724,13 @@ export const getSiteProfitability = async (req: Request, res: Response) => {
                 s.id                                                                        AS site_id,
                 s.site_no,
                 s.name                                                                      AS site_name,
-                NVL(s.service_type, 'Unset')                                                AS service_type,
-                NVL(s.site_type,    'Unset')                                                AS site_type,
-                NVL(s.ot_type,      'time_based')                                           AS ot_type,
+                COALESCE(s.service_type, 'Unset')                                           AS service_type,
+                COALESCE(s.site_type,    'Unset')                                           AS site_type,
+                COALESCE(s.ot_type,      'time_based')                                      AS ot_type,
                 COUNT(pa.id)                                                                AS invoice_count,
-                NVL(SUM(pa.invoice_price),                                              0)  AS total_revenue,
-                NVL(SUM(pa.cost_variant_amount + pa.salary_ot_amount + pa.expense_cost), 0) AS total_cost,
-                NVL(SUM(pa.invoice_price - pa.cost_variant_amount
+                COALESCE(SUM(pa.invoice_price),                                         0)  AS total_revenue,
+                COALESCE(SUM(pa.cost_variant_amount + pa.salary_ot_amount + pa.expense_cost), 0) AS total_cost,
+                COALESCE(SUM(pa.invoice_price - pa.cost_variant_amount
                         - pa.salary_ot_amount - pa.expense_cost),                       0)  AS net_profit
              FROM sites s
              LEFT JOIN profit_amount pa ON pa.site_id = s.id
@@ -812,54 +787,51 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
     try {
         const [summaryRes, monthlyRes, siteRes, quarterlyRes] = await Promise.all([
 
-            // Overall totals + cost breakdown
             execute<any>(
                 `SELECT
                     COUNT(*)                                                                        AS total_invoices,
-                    NVL(SUM(invoice_price), 0)                                                      AS total_revenue,
-                    NVL(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)              AS total_cost,
-                    NVL(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit,
-                    NVL(AVG(invoice_price), 0)                                                      AS avg_invoice_value,
-                    NVL(SUM(cost_variant_amount), 0)                                                AS total_cost_variant,
-                    NVL(SUM(salary_ot_amount),    0)                                                AS total_salary_ot,
-                    NVL(SUM(expense_cost),        0)                                                AS total_expense,
+                    COALESCE(SUM(invoice_price), 0)                                                 AS total_revenue,
+                    COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)         AS total_cost,
+                    COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit,
+                    COALESCE(AVG(invoice_price), 0)                                                 AS avg_invoice_value,
+                    COALESCE(SUM(cost_variant_amount), 0)                                           AS total_cost_variant,
+                    COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
+                    COALESCE(SUM(expense_cost),        0)                                           AS total_expense,
                     COUNT(DISTINCT site_id)                                                         AS site_count
                  FROM profit_amount`,
                 {}
             ),
 
-            // Monthly trend
             execute<any>(
                 `SELECT
                     TO_CHAR(created_at, 'YYYY-MM')                                                  AS month,
                     COUNT(*)                                                                        AS invoice_count,
-                    NVL(SUM(invoice_price), 0)                                                      AS total_revenue,
-                    NVL(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)              AS total_cost,
-                    NVL(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit,
-                    NVL(SUM(cost_variant_amount), 0)                                                AS total_cost_variant,
-                    NVL(SUM(salary_ot_amount),    0)                                                AS total_salary_ot,
-                    NVL(SUM(expense_cost),        0)                                                AS total_expense
+                    COALESCE(SUM(invoice_price), 0)                                                 AS total_revenue,
+                    COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)         AS total_cost,
+                    COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit,
+                    COALESCE(SUM(cost_variant_amount), 0)                                           AS total_cost_variant,
+                    COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
+                    COALESCE(SUM(expense_cost),        0)                                           AS total_expense
                  FROM profit_amount
                  GROUP BY TO_CHAR(created_at, 'YYYY-MM')
                  ORDER BY month`,
                 {}
             ),
 
-            // Per-site breakdown
             execute<any>(
                 `SELECT
                     pa.site_no,
                     pa.site_name,
-                    NVL(s.service_type, 'Unset')                                                    AS service_type,
-                    NVL(s.site_type,    'Unset')                                                    AS site_type,
-                    NVL(s.ot_type,      'time_based')                                               AS ot_type,
+                    COALESCE(s.service_type, 'Unset')                                               AS service_type,
+                    COALESCE(s.site_type,    'Unset')                                               AS site_type,
+                    COALESCE(s.ot_type,      'time_based')                                          AS ot_type,
                     COUNT(pa.id)                                                                    AS invoice_count,
-                    NVL(SUM(pa.invoice_price), 0)                                                   AS total_revenue,
-                    NVL(SUM(pa.cost_variant_amount + pa.salary_ot_amount + pa.expense_cost), 0)     AS total_cost,
-                    NVL(SUM(pa.invoice_price - pa.cost_variant_amount - pa.salary_ot_amount - pa.expense_cost), 0) AS net_profit,
-                    NVL(SUM(pa.cost_variant_amount), 0)                                             AS total_cost_variant,
-                    NVL(SUM(pa.salary_ot_amount),    0)                                             AS total_salary_ot,
-                    NVL(SUM(pa.expense_cost),        0)                                             AS total_expense,
+                    COALESCE(SUM(pa.invoice_price), 0)                                              AS total_revenue,
+                    COALESCE(SUM(pa.cost_variant_amount + pa.salary_ot_amount + pa.expense_cost), 0) AS total_cost,
+                    COALESCE(SUM(pa.invoice_price - pa.cost_variant_amount - pa.salary_ot_amount - pa.expense_cost), 0) AS net_profit,
+                    COALESCE(SUM(pa.cost_variant_amount), 0)                                        AS total_cost_variant,
+                    COALESCE(SUM(pa.salary_ot_amount),    0)                                        AS total_salary_ot,
+                    COALESCE(SUM(pa.expense_cost),        0)                                        AS total_expense,
                     MIN(TO_CHAR(pa.date_from, 'YYYY-MM-DD'))                                        AS first_invoice_date,
                     MAX(TO_CHAR(pa.date_to,   'YYYY-MM-DD'))                                        AS last_invoice_date
                  FROM profit_amount pa
@@ -869,14 +841,13 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                 {}
             ),
 
-            // Quarterly trend
             execute<any>(
                 `SELECT
                     TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q') AS quarter,
                     COUNT(*)                                                          AS invoice_count,
-                    NVL(SUM(invoice_price), 0)                                        AS total_revenue,
-                    NVL(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0) AS total_cost,
-                    NVL(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit
+                    COALESCE(SUM(invoice_price), 0)                                   AS total_revenue,
+                    COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0) AS total_cost,
+                    COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit
                  FROM profit_amount
                  GROUP BY TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q')
                  ORDER BY quarter`,
@@ -930,7 +901,6 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                 profitable_sites:   sites.filter(x => x.net_profit > 0).length,
                 loss_sites:         sites.filter(x => x.net_profit < 0).length,
             },
-            // Cost structure as % of total revenue (for pie/donut)
             costStructure: [
                 { name: 'Cost Variants',  value: cvTotal,      pct: totalRevenue > 0 ? Math.round((cvTotal    / totalRevenue) * 1000) / 10 : 0, fill: '#f59e0b' },
                 { name: 'Salary + OT',    value: soTotal,      pct: totalRevenue > 0 ? Math.round((soTotal    / totalRevenue) * 1000) / 10 : 0, fill: '#8b5cf6' },
@@ -965,7 +935,7 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
     }
 };
 
-// ─── Site Snapshot (full picture for one site) ──────────────────────────────
+// ─── Site Snapshot ──────────────────────────────────────────────────────────
 
 export const getSiteSnapshot = async (req: Request, res: Response) => {
     const { site_id } = req.params;
@@ -984,7 +954,6 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
             otTimeRes,
         ] = await Promise.all([
 
-            // 1. Site info + supervisor
             execute<any>(
                 `SELECT s.id, s.site_no, s.name, s.ot_type, s.service_type, s.site_type,
                         s.daily_target, s.task_invoice_price,
@@ -995,47 +964,41 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
                 { sid }
             ),
 
-            // 2. Staff list
             execute<any>(
                 `SELECT u.id, u.name, u.epf_number, u.role, u.status,
-                        NVL(u.basic_salary,0) AS basic_salary,
-                        NVL(u.fix_salary,0)   AS fix_salary
+                        COALESCE(u.basic_salary,0) AS basic_salary,
+                        COALESCE(u.fix_salary,0)   AS fix_salary
                  FROM users u
                  WHERE u.site_id = :sid
                  ORDER BY u.role, u.name`,
                 { sid }
             ),
 
-            // 3. Task-type breakdown (last 12 months)
-            // Fetch both row_count (for time_based) and sum_count (for target_based)
             execute<any>(
                 `SELECT LOWER(TRIM(t.task_description)) AS task_type,
                         COUNT(*)                          AS row_count,
-                        NVL(SUM(NVL(t.count,0)),0)        AS sum_count
+                        COALESCE(SUM(COALESCE(t.count,0)),0) AS sum_count
                  FROM tasks t
                  WHERE t.site_id  = :sid
-                   AND t.task_date >= ADD_MONTHS(TRUNC(SYSDATE,'MM'), -11)
+                   AND t.task_date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
                  GROUP BY LOWER(TRIM(t.task_description))
                  ORDER BY row_count DESC`,
                 { sid }
             ),
 
-            // 4. Monthly task activity (last 12 months)
-            // task_records = COUNT(*) used for time_based; sum_units = SUM(count) for target_based
             execute<any>(
                 `SELECT TO_CHAR(t.task_date,'YYYY-MM')   AS month,
                         COUNT(*)                          AS task_records,
-                        NVL(SUM(NVL(t.count,0)),0)        AS sum_units,
+                        COALESCE(SUM(COALESCE(t.count,0)),0) AS sum_units,
                         COUNT(DISTINCT t.staff_id)         AS workers
                  FROM tasks t
                  WHERE t.site_id  = :sid
-                   AND t.task_date >= ADD_MONTHS(TRUNC(SYSDATE,'MM'), -11)
+                   AND t.task_date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
                  GROUP BY TO_CHAR(t.task_date,'YYYY-MM')
                  ORDER BY month`,
                 { sid }
             ),
 
-            // 5. Invoice history (all time, newest first)
             execute<any>(
                 `SELECT pa.id, pa.date_from, pa.date_to,
                         pa.invoice_price                                                      AS revenue,
@@ -1050,13 +1013,12 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
                 { sid }
             ),
 
-            // 6. Monthly invoice trend (all time)
             execute<any>(
                 `SELECT TO_CHAR(pa.created_at,'YYYY-MM')                                     AS month,
                         COUNT(*)                                                              AS invoice_count,
-                        NVL(SUM(pa.invoice_price),0)                                         AS revenue,
-                        NVL(SUM(pa.cost_variant_amount+pa.salary_ot_amount+pa.expense_cost),0) AS cost,
-                        NVL(SUM(pa.invoice_price - pa.cost_variant_amount
+                        COALESCE(SUM(pa.invoice_price),0)                                    AS revenue,
+                        COALESCE(SUM(pa.cost_variant_amount+pa.salary_ot_amount+pa.expense_cost),0) AS cost,
+                        COALESCE(SUM(pa.invoice_price - pa.cost_variant_amount
                             - pa.salary_ot_amount - pa.expense_cost),0)                      AS profit
                  FROM profit_amount pa
                  WHERE pa.site_id = :sid
@@ -1065,18 +1027,16 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
                 { sid }
             ),
 
-            // 7. Target-based OT paid (payroll_saved_records uses site_no, not site_id)
             execute<any>(
-                `SELECT NVL(SUM(pr.extra_payment),0) AS total_ot,
+                `SELECT COALESCE(SUM(pr.extra_payment),0) AS total_ot,
                         COUNT(DISTINCT pr.staff_id)   AS staff_paid
                  FROM payroll_saved_records pr
                  WHERE pr.site_no = (SELECT site_no FROM sites WHERE id = :sid)`,
                 { sid }
             ),
 
-            // 8. Time-based OT paid (custom_ot_records uses site_no, not site_id)
             execute<any>(
-                `SELECT NVL(SUM(cor.total_payment),0) AS total_ot,
+                `SELECT COALESCE(SUM(cor.total_payment),0) AS total_ot,
                         COUNT(DISTINCT cor.staff_id)   AS staff_paid
                  FROM custom_ot_records cor
                  WHERE cor.site_no = (SELECT site_no FROM sites WHERE id = :sid)`,
@@ -1087,8 +1047,6 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
         const site = siteRes.rows?.[0];
         if (!site) return res.status(404).json({ message: 'Site not found' });
 
-        // time_based sites: count column is never filled (only in_time/out_time).
-        // daily_target = 0 also signals no target → use row COUNT as the unit metric.
         const isTimeBased = site.OT_TYPE === 'time_based' || Number(site.DAILY_TARGET || 0) === 0;
 
         const staff = (staffRes.rows || []).map((r: any) => ({
@@ -1111,8 +1069,6 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
             return {
                 task_type:   r.TASK_TYPE,
                 records:     rowCount,
-                // time_based: each row = 1 staff-day → use row count
-                // target_based: sum of the count column
                 total_units: isTimeBased ? rowCount : sumCount,
             };
         });
@@ -1218,7 +1174,6 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
 
         const [siteRes, dailyRes, staffRes, taskTypeRes, monthlyRes, otRes] = await Promise.all([
 
-            // 1. Site info + supervisor
             execute<any>(
                 `SELECT s.id, s.site_no, s.name, s.ot_type, s.service_type, s.site_type,
                         s.daily_target, u.name AS supervisor_name
@@ -1227,53 +1182,50 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                 { sid }
             ),
 
-            // 2. Daily task records + unique workers + avg hours + total count
             execute<any>(
                 `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD') AS task_date,
                         COUNT(*)                            AS task_records,
                         COUNT(DISTINCT t.staff_id)          AS unique_workers,
-                        SUM(NVL(t.count, 0))                AS total_count,
+                        SUM(COALESCE(t.count, 0))           AS total_count,
                         ROUND(AVG(
                             CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
-                            THEN (TO_NUMBER(SUBSTR(t.out_time,1,2)) + TO_NUMBER(SUBSTR(t.out_time,4,2))/60)
-                               - (TO_NUMBER(SUBSTR(t.in_time,1,2))  + TO_NUMBER(SUBSTR(t.in_time,4,2))/60)
+                            THEN (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
+                               - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
                             ELSE NULL END
                         ), 2) AS avg_hours
                  FROM tasks t
                  WHERE t.site_id = :sid
                    AND t.ot_type IN ('time_based', 'staff_outsource')
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM-DD')
                  ORDER BY task_date`,
                 { sid, d_from: from, d_to: to }
             ),
 
-            // 3. Per-staff: days worked, task records, avg hours, total count
             execute<any>(
                 `SELECT u.name          AS staff_name,
                         u.epf_number,
                         COUNT(DISTINCT t.task_date)                   AS days_worked,
                         COUNT(*)                                       AS task_records,
-                        SUM(NVL(t.count, 0))                          AS total_count,
+                        SUM(COALESCE(t.count, 0))                     AS total_count,
                         COUNT(CASE WHEN t.in_time IS NOT NULL THEN 1 END) AS records_with_time,
                         ROUND(AVG(
                             CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
-                            THEN (TO_NUMBER(SUBSTR(t.out_time,1,2)) + TO_NUMBER(SUBSTR(t.out_time,4,2))/60)
-                               - (TO_NUMBER(SUBSTR(t.in_time,1,2))  + TO_NUMBER(SUBSTR(t.in_time,4,2))/60)
+                            THEN (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
+                               - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
                             ELSE NULL END
                         ), 2) AS avg_hours
                  FROM tasks t JOIN users u ON t.staff_id = u.id
                  WHERE t.site_id = :sid
                    AND t.ot_type IN ('time_based', 'staff_outsource')
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY u.name, u.epf_number
                  ORDER BY days_worked DESC, task_records DESC`,
                 { sid, d_from: from, d_to: to }
             ),
 
-            // 4. Task type / activity breakdown
             execute<any>(
                 `SELECT LOWER(TRIM(t.task_description)) AS task_type,
                         COUNT(*)                        AS records,
@@ -1282,14 +1234,13 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                  FROM tasks t
                  WHERE t.site_id = :sid
                    AND t.ot_type IN ('time_based', 'staff_outsource')
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY LOWER(TRIM(t.task_description))
                  ORDER BY records DESC`,
                 { sid, d_from: from, d_to: to }
             ),
 
-            // 5. Monthly trend
             execute<any>(
                 `SELECT TO_CHAR(t.task_date, 'YYYY-MM') AS month,
                         COUNT(*)                         AS task_records,
@@ -1298,14 +1249,13 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                  FROM tasks t
                  WHERE t.site_id = :sid
                    AND t.ot_type IN ('time_based', 'staff_outsource')
-                   AND t.task_date >= TO_DATE(:d_from, 'YYYY-MM-DD')
-                   AND t.task_date <= TO_DATE(:d_to,   'YYYY-MM-DD')
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
                  GROUP BY TO_CHAR(t.task_date, 'YYYY-MM')
                  ORDER BY month`,
                 { sid, d_from: from, d_to: to }
             ),
 
-            // 6. Custom OT records for this site
             execute<any>(
                 `SELECT cor.staff_name, cor.epf_number,
                         TO_CHAR(cor.date_from,'YYYY-MM-DD') AS date_from,
@@ -1317,7 +1267,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                  FROM custom_ot_records cor
                  WHERE cor.site_no = (SELECT site_no FROM sites WHERE id = :sid)
                  ORDER BY cor.saved_at DESC
-                 FETCH FIRST 100 ROWS ONLY`,
+                 LIMIT 100`,
                 { sid }
             ),
         ]);

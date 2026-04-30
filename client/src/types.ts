@@ -119,6 +119,12 @@ export interface InvoiceTaskLine {
     LINE_TOTAL: number;
 }
 
+export interface InvoiceOutsourceStaffLine {
+    ID: number;
+    NAME: string;
+    ATTEND_COUNT: number;
+}
+
 export interface InvoicePreview {
     site: { ID: number; SITE_NO: string; NAME: string; OT_TYPE: string };
     date_from: string;
@@ -133,4 +139,6 @@ export interface InvoicePreview {
     salary_ot_amount: number;
     task_lines: InvoiceTaskLine[];
     total_invoice_price: number;
+    outsource_staff_lines?: InvoiceOutsourceStaffLine[];
+    outsource_ot_hours?: number;
 }
