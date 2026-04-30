@@ -31,13 +31,18 @@ export const getSites = async (req: Request, res: Response) => {
 
         const siteIds = sites.map((s: any) => s.ID);
         if (siteIds.length > 0) {
+            const idParams = Object.fromEntries(siteIds.map((id: number, i: number) => [`sid${i}`, id]));
+            const idPlaceholders = siteIds.map((_: number, i: number) => `:sid${i}`).join(', ');
+
             const taskTypesResult = await execute<any>(
-                `SELECT site_id, task_name, invoice_price FROM site_task_types WHERE site_id IN (${siteIds.join(',')})`
+                `SELECT site_id, task_name, invoice_price FROM site_task_types WHERE site_id IN (${idPlaceholders})`,
+                idParams
             );
             const taskTypes = taskTypesResult.rows || [];
 
             const costFactorsResult = await execute<any>(
-                `SELECT site_id, factor_key, factor_value FROM cost_varient WHERE site_id IN (${siteIds.join(',')}) ORDER BY id`
+                `SELECT site_id, factor_key, factor_value FROM cost_varient WHERE site_id IN (${idPlaceholders}) ORDER BY id`,
+                idParams
             );
             const costFactors = costFactorsResult.rows || [];
 

@@ -24,9 +24,19 @@ const toLocalDateStr = (d: Date): string => {
 };
 
 export const getDayType = (taskDate: Date | string, poyaDates: Set<string>): DayType => {
-    const d = typeof taskDate === 'string' ? new Date(taskDate) : taskDate;
-    const dayOfWeek = d.getDay(); // 0=Sun, 6=Sat
-    const dateStr = toLocalDateStr(d); // YYYY-MM-DD in local time
+    // Always construct via local parts so UTC-parsed 'YYYY-MM-DD' strings don't shift
+    // the weekday (new Date('YYYY-MM-DD') is UTC midnight, wrong on UTC+5:30 servers).
+    let dayOfWeek: number;
+    let dateStr: string;
+    if (typeof taskDate === 'string') {
+        const [y, m, d] = taskDate.split('-').map(Number);
+        const local = new Date(y, m - 1, d); // local midnight — getDay() is correct
+        dayOfWeek = local.getDay();
+        dateStr = taskDate; // already 'YYYY-MM-DD'
+    } else {
+        dayOfWeek = taskDate.getDay();
+        dateStr = toLocalDateStr(taskDate);
+    }
 
     if (dayOfWeek === 0) return 'sunday_poya';
     if (poyaDates.has(dateStr)) return 'sunday_poya';

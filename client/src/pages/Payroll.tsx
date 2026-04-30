@@ -259,6 +259,9 @@ const Payroll: React.FC = () => {
     const totalPayment = canSeePayment ? payrollData.reduce((s, r) => s + (Number(r.extra_payment || r.total_payment) || 0), 0) : 0;
     const totalHours = otType === 'time_based' ? payrollData.reduce((s, r) => s + (Number(r.extra_hours || r.total_extra_hours) || 0), 0) : 0;
     const totalUnits = otType === 'target_based' ? payrollData.reduce((s, r) => s + (Number(r.extra_units) || 0), 0) : 0;
+    const totalOutsourceHoursWorked = otType === 'staff_outsource' ? payrollData.reduce((s, r) => s + (Number(r.hours_worked ?? r.total_hours) || 0), 0) : 0;
+    const totalOutsourceExtraHours  = otType === 'staff_outsource' ? payrollData.reduce((s, r) => s + (Number(r.extra_hours ?? r.total_extra_hours) || 0), 0) : 0;
+    const totalOutsourceHours = totalOutsourceHoursWorked; // used in stats strip
 
     return (
         <div className="space-y-5">
@@ -358,12 +361,13 @@ const Payroll: React.FC = () => {
                                 className="w-full pl-9 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-medium text-slate-500 cursor-not-allowed">
                                 <option value="time_based">Time Based (OT)</option>
                                 <option value="target_based">Target Based</option>
+                                <option value="staff_outsource">Staff Outsource</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
-                {otType === 'time_based' && (
+                {(otType === 'time_based' || otType === 'staff_outsource') && (
                     <div className="mt-4 flex gap-2">
                         <button onClick={() => setViewMode('detailed')}
                             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${viewMode === 'detailed' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
@@ -389,14 +393,16 @@ const Payroll: React.FC = () => {
                             <p className="text-xl font-bold text-slate-900">{payrollData.length}</p>
                         </div>
                     </div>
-                    {otType === 'time_based' && (
+                    {(otType === 'time_based' || otType === 'staff_outsource') && (
                         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
                             <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
                                 <Clock className="w-4 h-4 text-blue-600" />
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500">Total Hours</p>
-                                <p className="text-xl font-bold text-slate-900">{totalHours.toFixed(1)}</p>
+                                <p className="text-xs text-slate-500">{otType === 'staff_outsource' ? 'Total Hours' : 'Extra Hours'}</p>
+                                <p className="text-xl font-bold text-slate-900">
+                                    {otType === 'staff_outsource' ? totalOutsourceHours.toFixed(1) : totalHours.toFixed(1)}
+                                </p>
                             </div>
                         </div>
                     )}
@@ -417,7 +423,7 @@ const Payroll: React.FC = () => {
                         </div>
                         <div>
                             <p className="text-xs text-slate-500">OT Type</p>
-                            <p className="text-sm font-bold text-slate-900">{otType === 'time_based' ? 'Time Based' : 'Target'}</p>
+                            <p className="text-sm font-bold text-slate-900">{otType === 'time_based' ? 'Time Based' : otType === 'staff_outsource' ? 'Staff Outsource' : 'Target'}</p>
                         </div>
                     </div>
                     {canSeePayment && (
@@ -457,7 +463,31 @@ const Payroll: React.FC = () => {
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-slate-100">
                             <thead className="bg-slate-50">
-                                {otType === 'time_based' ? (
+                                {otType === 'staff_outsource' ? (
+                                    viewMode === 'detailed' ? (
+                                        <tr>
+                                            {!siteFilter && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Site</th>}
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">EPF No</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Staff</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Day Type</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In / Out</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Def. In</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Def. Out / Cut</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Hours Worked</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Extra Hrs</th>
+                                        </tr>
+                                    ) : (
+                                        <tr>
+                                            {!siteFilter && <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Site</th>}
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">EPF No</th>
+                                            <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Staff</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Days Attended</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Hours</th>
+                                            <th className="px-5 py-3.5 text-right text-xs font-semibold text-blue-600 uppercase tracking-wider">Extra Hrs</th>
+                                        </tr>
+                                    )
+                                ) : otType === 'time_based' ? (
                                     (viewMode === 'detailed' && siteFilter) ? (
                                         <tr>
                                             <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">EPF No</th>
@@ -495,7 +525,45 @@ const Payroll: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {payrollData.map((row, idx) => {
-                                    if (otType === 'time_based' && viewMode === 'detailed' && siteFilter) {
+                                    if (otType === 'staff_outsource') {
+                                        if (viewMode === 'detailed') {
+                                            const dt = row.day_type || 'weekday';
+                                            const dtInfo = DAY_TYPE_LABEL[dt] || DAY_TYPE_LABEL.weekday;
+                                            const defOutDisplay = dt === 'saturday' ? '12:00 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
+                                            return (
+                                                <tr key={idx} className={`hover:bg-slate-50/60 transition-colors ${dt === 'sunday_poya' ? 'bg-orange-50/40' : dt === 'saturday' ? 'bg-blue-50/30' : ''}`}>
+                                                    {!siteFilter && <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.SITE_NO || '-'}</td>}
+                                                    <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.EPF_NUMBER || '-'}</td>
+                                                    <td className="px-5 py-4 text-sm font-semibold text-slate-900 whitespace-nowrap">{row.NAME}</td>
+                                                    <td className="px-5 py-4 text-sm text-slate-500 whitespace-nowrap">{row.ATTENDANCE_DATE || '-'}</td>
+                                                    <td className="px-5 py-4 whitespace-nowrap">
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${dtInfo.cls}`}>{dtInfo.label}</span>
+                                                    </td>
+                                                    <td className="px-5 py-4 whitespace-nowrap">
+                                                        <div className="flex flex-col gap-0.5 text-xs">
+                                                            <span className="text-emerald-600 font-medium">In: {row.IN_TIME || '—'}</span>
+                                                            <span className="text-rose-500 font-medium">Out: {row.OUT_TIME || '—'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap font-mono">{row.default_in_time || DEFAULT_IN_TIME}</td>
+                                                    <td className="px-5 py-4 text-sm text-right text-slate-500 whitespace-nowrap font-mono">{defOutDisplay}</td>
+                                                    <td className="px-5 py-4 text-sm text-right font-bold text-slate-900 whitespace-nowrap">{Number(row.hours_worked || 0).toFixed(2)}</td>
+                                                    <td className="px-5 py-4 text-sm text-right font-bold text-blue-700 whitespace-nowrap">{Number(row.extra_hours || 0).toFixed(2)}</td>
+                                                </tr>
+                                            );
+                                        } else {
+                                            return (
+                                                <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                                    {!siteFilter && <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.SITE_NO || '-'}</td>}
+                                                    <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.EPF_NUMBER || '-'}</td>
+                                                    <td className="px-5 py-4 text-sm font-semibold text-slate-900 whitespace-nowrap">{row.NAME}</td>
+                                                    <td className="px-5 py-4 text-sm text-right text-slate-700 whitespace-nowrap">{Number(row.days_attended || 0)}</td>
+                                                    <td className="px-5 py-4 text-sm text-right font-bold text-slate-900 whitespace-nowrap">{Number(row.total_hours || 0).toFixed(2)}</td>
+                                                    <td className="px-5 py-4 text-sm text-right font-bold text-blue-700 whitespace-nowrap">{Number(row.total_extra_hours || 0).toFixed(2)}</td>
+                                                </tr>
+                                            );
+                                        }
+                                    } else if (otType === 'time_based' && viewMode === 'detailed' && siteFilter) {
                                         const dt = row.day_type || 'weekday';
                                         const dtInfo = DAY_TYPE_LABEL[dt] || DAY_TYPE_LABEL.weekday;
                                         const defOutDisplay = dt === 'saturday' ? '12:00 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
@@ -550,7 +618,35 @@ const Payroll: React.FC = () => {
                                     }
                                 })}
                             </tbody>
-                            {canSeePayment && payrollData.length > 0 && (
+                            {otType === 'staff_outsource' && payrollData.length > 0 && (
+                                <tfoot className="bg-blue-50 border-t-2 border-blue-200">
+                                    <tr>
+                                        <td colSpan={siteFilter
+                                                ? (viewMode === 'detailed' ? 7 : 2)
+                                                : (viewMode === 'detailed' ? 8 : 3)}
+                                            className="px-5 py-3 text-sm font-bold text-slate-700">Grand Total</td>
+                                        {viewMode === 'detailed' && (
+                                            <td className="px-5 py-3 text-sm font-bold text-right text-slate-900">
+                                                {totalOutsourceHoursWorked.toFixed(2)} hrs
+                                            </td>
+                                        )}
+                                        {viewMode === 'summary' && (
+                                            <>
+                                                <td className="px-5 py-3 text-sm font-bold text-right text-slate-900">
+                                                    {payrollData.reduce((s, r) => s + (Number(r.days_attended) || 0), 0)}
+                                                </td>
+                                                <td className="px-5 py-3 text-sm font-bold text-right text-slate-900">
+                                                    {totalOutsourceHoursWorked.toFixed(2)} hrs
+                                                </td>
+                                            </>
+                                        )}
+                                        <td className="px-5 py-3 text-sm font-bold text-right text-blue-700">
+                                            {totalOutsourceExtraHours.toFixed(2)} hrs
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            )}
+                            {canSeePayment && otType !== 'staff_outsource' && payrollData.length > 0 && (
                                 <tfoot className="bg-emerald-50 border-t-2 border-emerald-200">
                                     <tr>
                                         <td colSpan={otType === 'time_based' && viewMode === 'detailed' && siteFilter ? 7 : (siteFilter ? 2 : 3)}

@@ -1,17 +1,20 @@
 import { getPool } from './config';
 
-// Convert Oracle-style named params (:name) to PostgreSQL positional ($1, $2, …).
-// Also handles array params by replacing each :name in order with $1, $2, …
+// Regex matches either a single-quoted SQL string literal (group 1) or a :name param (group 2).
+// Literals are returned unchanged so colons inside format strings like 'HH24:MI' are never replaced.
+const PARAM_RE = /('(?:[^']|'')*')|(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
+
 function convertParams(sql: string, params: Record<string, any> | any[]): { text: string; values: any[] } {
     if (Array.isArray(params)) {
         let idx = 0;
-        const text = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, () => `$${++idx}`);
+        const text = sql.replace(PARAM_RE, (match, literal) => literal ? match : `$${++idx}`);
         return { text, values: params };
     }
 
     const values: any[] = [];
     const seen: Record<string, number> = {};
-    const text = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name) => {
+    const text = sql.replace(PARAM_RE, (match, literal, name) => {
+        if (literal) return match;
         if (!(name in seen)) {
             seen[name] = values.length + 1;
             values.push(params[name] ?? null);

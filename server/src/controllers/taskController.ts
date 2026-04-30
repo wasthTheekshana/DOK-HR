@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
+import { getDayType, calculateTimeBasedExtra, calculateTimeBasedPayment } from '../utils/payrollUtils';
+
+const DEFAULT_OUT_TIME_TC = '17:00';
+const DEFAULT_IN_TIME_TC  = '08:30';
 
 // ─── Attendance Sync Helper ──────────────────────────────────────────────────
 async function syncAttendance(
@@ -378,21 +382,32 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
     }
 
     try {
+        // Fetch poya dates so getDayType can classify each record correctly
+        const poyaResult = await execute<any>(
+            `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
+             WHERE poya_date BETWEEN :date_from AND :date_to`,
+            { date_from: String(date_from), date_to: String(date_to) }
+        );
+        const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => String(r.POYA_DATE)));
+
+        // One row per staff+date (min in_time / max out_time) to avoid double-counting OT on multi-task days
         let query = `
             SELECT
-                s.id as site_id,
                 s.site_no,
                 s.name as site_name,
                 u.id as staff_id,
                 u.name as staff_name,
                 COALESCE(u.ot_percentage, 0) as ot_percentage,
                 COALESCE(u.basic_salary, 0) as basic_salary,
-                t.out_time
+                TO_CHAR(t.task_date, 'YYYY-MM-DD') as task_date,
+                MIN(t.in_time)  as in_time,
+                MAX(t.out_time) as out_time
             FROM tasks t
             JOIN users u ON t.staff_id = u.id
             JOIN sites s ON t.site_id = s.id
             WHERE t.task_date BETWEEN :date_from AND :date_to
-            AND t.out_time IS NOT NULL
+              AND t.out_time IS NOT NULL
+              AND s.ot_type != 'staff_outsource'
         `;
 
         const params: any = {
@@ -401,63 +416,95 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
         };
 
         if (site_id) {
-            query += ` AND t.site_id = :site_id`;
+            query += ` AND s.id = :site_id`;
             params.site_id = Number(site_id);
         }
 
-        query += ` ORDER BY s.name, u.name`;
+        query += ` GROUP BY s.site_no, s.name, u.id, u.name, u.ot_percentage, u.basic_salary, t.task_date`;
+        query += ` ORDER BY s.name, u.name, t.task_date`;
 
         const result = await execute<any>(query, params);
         const rows = result.rows || [];
 
-        const DEFAULT_OUT_TIME = '17:00';
-        const staffMap = new Map();
+        const staffMap = new Map<string, any>();
 
+        const accumulate = (staffId: number, siteNo: string, entry: any, extraHours: number) => {
+            const key = `${staffId}_${siteNo}`;
+            if (!staffMap.has(key)) staffMap.set(key, { ...entry, TOTAL_EXTRA_HRS: 0 });
+            staffMap.get(key)!.TOTAL_EXTRA_HRS += extraHours;
+        };
+
+        // Time-based / target-based sites — from tasks table
         rows.forEach((row: any) => {
-            const outTime = row.OUT_TIME;
-            let extraHours = 0;
+            const dayType = getDayType(String(row.TASK_DATE), poyaDates);
+            const extraHours = calculateTimeBasedExtra(
+                String(row.OUT_TIME), DEFAULT_OUT_TIME_TC,
+                row.IN_TIME ? String(row.IN_TIME) : undefined, DEFAULT_IN_TIME_TC,
+                dayType
+            );
+            accumulate(Number(row.STAFF_ID), String(row.SITE_NO), {
+                SITE_NO:       row.SITE_NO,
+                SITE_NAME:     row.SITE_NAME,
+                STAFF_NAME:    row.STAFF_NAME,
+                OT_PERCENTAGE: Number(row.OT_PERCENTAGE) || 0,
+                BASIC_SALARY:  Number(row.BASIC_SALARY)  || 0,
+                IS_OUTSOURCE:  false,
+            }, extraHours);
+        });
 
-            if (outTime) {
-                const [outH, outM] = outTime.split(':').map(Number);
-                const [defH, defM] = DEFAULT_OUT_TIME.split(':').map(Number);
+        // Staff-outsource sites — from attendance table
+        let attQuery = `
+            SELECT
+                s.site_no,
+                s.name as site_name,
+                u.id as staff_id,
+                u.name as staff_name,
+                COALESCE(u.basic_salary, 0) as basic_salary,
+                TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
+                a.in_time, a.out_time
+            FROM attendance a
+            JOIN users u ON u.id = a.staff_id
+            JOIN sites s ON s.id = a.site_id
+            WHERE s.ot_type = 'staff_outsource'
+              AND a.attendance_date BETWEEN :date_from AND :date_to
+              AND a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+        `;
+        if (site_id) attQuery += ` AND s.id = :site_id`;
+        attQuery += ` ORDER BY s.site_no, u.name, a.attendance_date`;
 
-                const outDate = new Date(2000, 0, 1, outH, outM);
-                const defDate = new Date(2000, 0, 1, defH, defM);
-
-                const diffMs = outDate.getTime() - defDate.getTime();
-                if (diffMs > 0) {
-                    extraHours = diffMs / (1000 * 60 * 60);
-                }
-            }
-
-            if (!staffMap.has(row.STAFF_ID)) {
-                staffMap.set(row.STAFF_ID, {
-                    SITE_NO: row.SITE_NO,
-                    SITE_NAME: row.SITE_NAME,
-                    STAFF_NAME: row.STAFF_NAME,
-                    OT_PERCENTAGE: Number(row.OT_PERCENTAGE) || 0,
-                    BASIC_SALARY: Number(row.BASIC_SALARY) || 0,
-                    TOTAL_EXTRA_HRS: 0
-                });
-            }
-
-            const entry = staffMap.get(row.STAFF_ID);
-            entry.TOTAL_EXTRA_HRS += extraHours;
+        const attResult = await execute<any>(attQuery, params);
+        (attResult.rows || []).forEach((row: any) => {
+            const dayType = getDayType(String(row.ATTENDANCE_DATE), poyaDates);
+            const extraHours = calculateTimeBasedExtra(
+                String(row.OUT_TIME), DEFAULT_OUT_TIME_TC,
+                String(row.IN_TIME),  DEFAULT_IN_TIME_TC,
+                dayType
+            );
+            accumulate(Number(row.STAFF_ID), String(row.SITE_NO), {
+                SITE_NO:       row.SITE_NO,
+                SITE_NAME:     row.SITE_NAME,
+                STAFF_NAME:    row.STAFF_NAME,
+                OT_PERCENTAGE: 0,
+                BASIC_SALARY:  Number(row.BASIC_SALARY) || 0,
+                IS_OUTSOURCE:  true,
+            }, extraHours);
         });
 
         const aggregatedData = Array.from(staffMap.values()).map((entry: any) => {
-            const isOT = entry.OT_PERCENTAGE > 0;
-            const otRate = isOT ? (entry.BASIC_SALARY / 240) * (entry.OT_PERCENTAGE / 100) : 0;
-            const payment = entry.TOTAL_EXTRA_HRS * otRate;
+            const isOT = !entry.IS_OUTSOURCE && entry.OT_PERCENTAGE > 0;
+            const { payment, rate: otRate } = isOT
+                ? calculateTimeBasedPayment(entry.TOTAL_EXTRA_HRS, entry.BASIC_SALARY)
+                : { payment: 0, rate: 0 };
             return {
-                SITE_NO: entry.SITE_NO,
-                SITE_NAME: entry.SITE_NAME,
-                STAFF_NAME: entry.STAFF_NAME,
-                OT_PERCENTAGE: entry.OT_PERCENTAGE,
+                SITE_NO:         entry.SITE_NO,
+                SITE_NAME:       entry.SITE_NAME,
+                STAFF_NAME:      entry.STAFF_NAME,
+                OT_PERCENTAGE:   entry.OT_PERCENTAGE,
                 TOTAL_EXTRA_HRS: Number(entry.TOTAL_EXTRA_HRS.toFixed(2)),
-                OT_RATE: Number(otRate.toFixed(2)),
-                PAYMENT: Number(payment.toFixed(2)),
-                IS_OT: isOT
+                OT_RATE:         Number(otRate.toFixed(2)),
+                PAYMENT:         Number(payment.toFixed(2)),
+                IS_OT:           isOT,
+                IS_OUTSOURCE:    entry.IS_OUTSOURCE,
             };
         });
 

@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
+import { getDayType, calculateTimeBasedExtra } from '../utils/payrollUtils';
+
+const DEFAULT_IN_TIME  = '08:30';
+const DEFAULT_OUT_TIME = '17:00';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -91,6 +95,41 @@ export const previewInvoice = async (req: Request, res: Response) => {
 
         const totalOT = otTimeBased + otTargetBased;
 
+        // Extra OT hours for outsource sites: use same logic as payroll (getDayType + calculateTimeBasedExtra)
+        let outsourceOtHours = 0;
+        if (isStaffOutsource) {
+            try {
+                const poyaResult = await execute<any>(
+                    `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days WHERE poya_date BETWEEN :date_from AND :date_to`,
+                    { date_from, date_to }
+                );
+                const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => String(r.POYA_DATE)));
+
+                const attResult = await execute<any>(
+                    `SELECT TO_CHAR(attendance_date, 'YYYY-MM-DD') as attendance_date, in_time, out_time
+                     FROM attendance
+                     WHERE site_id = :site_id
+                       AND attendance_date >= :date_from
+                       AND attendance_date <= :date_to
+                       AND in_time IS NOT NULL
+                       AND out_time IS NOT NULL`,
+                    { site_id: Number(site_id), date_from, date_to }
+                );
+
+                outsourceOtHours = (attResult.rows || []).reduce((sum: number, row: any) => {
+                    const dayType = getDayType(String(row.ATTENDANCE_DATE), poyaDates);
+                    const extra = calculateTimeBasedExtra(
+                        String(row.OUT_TIME), DEFAULT_OUT_TIME,
+                        String(row.IN_TIME),  DEFAULT_IN_TIME,
+                        dayType
+                    );
+                    return sum + extra;
+                }, 0);
+            } catch (otErr) {
+                console.error('outsource OT hours fetch error (non-fatal):', otErr);
+            }
+        }
+
         let outsourceStaffLines: { ID: number; NAME: string; ATTEND_COUNT: number }[] = [];
         if (isStaffOutsource) {
             try {
@@ -164,6 +203,7 @@ export const previewInvoice = async (req: Request, res: Response) => {
             task_lines: taskLines,
             total_invoice_price: totalInvoicePrice,
             outsource_staff_lines: outsourceStaffLines,
+            outsource_ot_hours: outsourceOtHours,
         });
     } catch (err) {
         console.error('previewInvoice error:', err);

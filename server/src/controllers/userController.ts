@@ -16,8 +16,10 @@ export const getUsers = async (req: Request, res: Response) => {
             const supervisedSiteIds = sitesResult.rows?.map((r: any) => r.ID) || [];
 
             if (supervisedSiteIds.length > 0) {
-                const siteIdsStr = supervisedSiteIds.join(',');
-                query += ` AND site_id IN (${siteIdsStr})`;
+                const idParams = Object.fromEntries(supervisedSiteIds.map((id: number, i: number) => [`sid${i}`, id]));
+                const idPlaceholders = supervisedSiteIds.map((_: number, i: number) => `:sid${i}`).join(', ');
+                query += ` AND site_id IN (${idPlaceholders})`;
+                Object.assign(params, idParams);
             } else {
                 return res.json([]);
             }

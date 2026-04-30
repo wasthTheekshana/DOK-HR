@@ -140,4 +140,5 @@ export interface InvoicePreview {
     task_lines: InvoiceTaskLine[];
     total_invoice_price: number;
     outsource_staff_lines?: InvoiceOutsourceStaffLine[];
+    outsource_ot_hours?: number;
 }

@@ -136,6 +136,118 @@ export const getPayroll = async (req: Request, res: Response) => {
                 };
             });
             return res.json(rows);
+
+        } else if (ot_type === 'staff_outsource') {
+            const params: any = { date_from: String(date_from), date_to: String(date_to) };
+            if (site_no) params.site_no = String(site_no);
+
+            if (view_mode === 'summary') {
+                // Fetch poya dates for correct day-type classification
+                const poyaResultSum = await execute<any>(
+                    `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
+                     WHERE poya_date BETWEEN :date_from AND :date_to`,
+                    { date_from: String(date_from), date_to: String(date_to) }
+                );
+                const poyaDatesSum = new Set<string>((poyaResultSum.rows || []).map((r: any) => r.POYA_DATE as string));
+
+                let sumQuery = `
+                    SELECT u.id as staff_id, u.epf_number, u.name, s.site_no, s.name as site_name,
+                           TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
+                           a.in_time, a.out_time
+                    FROM attendance a
+                    JOIN users u ON u.id = a.staff_id
+                    JOIN sites s ON s.id = a.site_id
+                    WHERE s.ot_type = 'staff_outsource'
+                      AND a.attendance_date BETWEEN :date_from AND :date_to
+                `;
+                if (site_no) sumQuery += ` AND s.site_no = :site_no`;
+                sumQuery += ` ORDER BY s.site_no, u.name, a.attendance_date`;
+
+                const sumResult = await execute<any>(sumQuery, params);
+
+                // Aggregate per staff using same logic as detailed view
+                const summaryMap = new Map<string, any>();
+                (sumResult.rows || []).forEach((row: any) => {
+                    const key = `${row.STAFF_ID}_${row.SITE_NO}`;
+                    if (!summaryMap.has(key)) {
+                        summaryMap.set(key, {
+                            STAFF_ID:     row.STAFF_ID,
+                            EPF_NUMBER:   row.EPF_NUMBER,
+                            NAME:         row.NAME,
+                            SITE_NO:      row.SITE_NO,
+                            SITE_NAME:    row.SITE_NAME,
+                            days_attended:     0,
+                            total_hours:       0,
+                            total_extra_hours: 0,
+                        });
+                    }
+                    const entry = summaryMap.get(key)!;
+                    entry.days_attended += 1;
+
+                    if (row.IN_TIME && row.OUT_TIME) {
+                        const [oh, om] = String(row.OUT_TIME).split(':').map(Number);
+                        const [ih, im] = String(row.IN_TIME).split(':').map(Number);
+                        entry.total_hours += Math.round(((oh * 60 + om) - (ih * 60 + im)) / 60 * 100) / 100;
+                    }
+
+                    const dayType = getDayType(String(row.ATTENDANCE_DATE), poyaDatesSum);
+                    entry.total_extra_hours += calculateTimeBasedExtra(
+                        String(row.OUT_TIME), DEFAULT_OUT_TIME,
+                        String(row.IN_TIME),  DEFAULT_IN_TIME,
+                        dayType
+                    );
+                });
+
+                return res.json(Array.from(summaryMap.values()).map(e => ({
+                    ...e,
+                    total_hours:       Math.round(e.total_hours * 100) / 100,
+                    total_extra_hours: e.total_extra_hours,
+                })));
+            }
+
+            // Detailed view — fetch poya dates so we can compute day type
+            const poyaResult = await execute<any>(
+                `SELECT TO_CHAR(poya_date, 'YYYY-MM-DD') as poya_date FROM poya_days
+                 WHERE poya_date BETWEEN :date_from AND :date_to`,
+                { date_from: String(date_from), date_to: String(date_to) }
+            );
+            const poyaDates = new Set<string>((poyaResult.rows || []).map((r: any) => r.POYA_DATE as string));
+
+            let detailQuery = `
+                SELECT u.id as staff_id, u.epf_number, u.name, s.site_no, s.name as site_name,
+                       TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date,
+                       a.in_time, a.out_time
+                FROM attendance a
+                JOIN users u ON u.id = a.staff_id
+                JOIN sites s ON s.id = a.site_id
+                WHERE s.ot_type = 'staff_outsource'
+                  AND a.attendance_date BETWEEN :date_from AND :date_to
+            `;
+            if (site_no) detailQuery += ` AND s.site_no = :site_no`;
+            detailQuery += ` ORDER BY s.site_no, u.name, a.attendance_date`;
+
+            const detailResult = await execute<any>(detailQuery, params);
+            const rows = (detailResult.rows || []).map((row: any) => {
+                const dayType = getDayType(row.ATTENDANCE_DATE, poyaDates);
+                const extraHours = calculateTimeBasedExtra(row.OUT_TIME, DEFAULT_OUT_TIME, row.IN_TIME, DEFAULT_IN_TIME, dayType);
+                const hoursWorked = (row.IN_TIME && row.OUT_TIME)
+                    ? Math.round(((() => {
+                        const [oh, om] = row.OUT_TIME.split(':').map(Number);
+                        const [ih, im] = row.IN_TIME.split(':').map(Number);
+                        return ((oh * 60 + om) - (ih * 60 + im)) / 60;
+                    })()) * 100) / 100
+                    : 0;
+                return {
+                    ...row,
+                    day_type: dayType,
+                    hours_worked: hoursWorked,
+                    extra_hours: extraHours,
+                    default_in_time: DEFAULT_IN_TIME,
+                    default_out_time: DEFAULT_OUT_TIME,
+                };
+            });
+            return res.json(rows);
+
         } else {
             return res.status(400).json({ message: 'Invalid OT type' });
         }

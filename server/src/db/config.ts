@@ -1,7 +1,12 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// pg returns bigint (20) and numeric/decimal (1700) as strings by default.
+// Parse them as JS numbers so aggregations (COUNT, SUM) work correctly.
+types.setTypeParser(20,   val => parseInt(val, 10));   // bigint
+types.setTypeParser(1700, val => parseFloat(val));      // numeric / decimal
 
 let pool: Pool;
 

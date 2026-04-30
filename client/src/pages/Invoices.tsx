@@ -40,6 +40,7 @@ const Invoices: React.FC = () => {
     const [editedVariants,  setEditedVariants]  = useState<{ key: string; value: string }[]>([]);
     const [additionalCosts, setAdditionalCosts] = useState<{ key: string; value: string }[]>([]);
     const [outsourceLines,  setOutsourceLines]  = useState<(InvoiceOutsourceStaffLine & { price: string })[]>([]);
+    const [otHoursPrice,    setOtHoursPrice]    = useState('');
     const [saving, setSaving]               = useState(false);
 
     // ── Edit modal ──
@@ -66,7 +67,7 @@ const Invoices: React.FC = () => {
     const openModal = () => {
         setSelectedSiteId(''); setDateFrom(''); setDateTo('');
         setPreview(null);
-        setEditedVariants([]); setAdditionalCosts([]); setOutsourceLines([]);
+        setEditedVariants([]); setAdditionalCosts([]); setOutsourceLines([]); setOtHoursPrice('');
         setIsModalOpen(true);
     };
 
@@ -85,6 +86,7 @@ const Invoices: React.FC = () => {
                 }))
             );
             setAdditionalCosts([]);
+            setOtHoursPrice('');
             setOutsourceLines(
                 (data.outsource_staff_lines || []).map((l: InvoiceOutsourceStaffLine) => ({
                     ...l,
@@ -95,10 +97,12 @@ const Invoices: React.FC = () => {
         finally { setCalculating(false); }
     };
 
-    const outsourceInvoiceTotal = outsourceLines.reduce((s, l) => {
+    const outsourceStaffTotal = outsourceLines.reduce((s, l) => {
         const p = parseFloat(l.price) || 0;
         return s + l.ATTEND_COUNT * p;
     }, 0);
+    const outsourceOtTotal = (preview?.outsource_ot_hours || 0) * (parseFloat(otHoursPrice) || 0);
+    const outsourceInvoiceTotal = outsourceStaffTotal + outsourceOtTotal;
 
     const handleSave = async () => {
         if (!preview) return;
@@ -255,11 +259,16 @@ const Invoices: React.FC = () => {
         // 4. Task Calculation / Outsource Staff Attendance
         const isOutsourcePDF = data.site.OT_TYPE === 'staff_outsource';
         if (isOutsourcePDF && data.outsource_staff_lines && data.outsource_staff_lines.length > 0) {
-            sectionTitle('4. Outsource Staff Attendance', 4, 120, 87);
+            sectionTitle('4. Outsource Staff Attendance & OT', 4, 120, 87);
             autoTable(doc, {
                 startY: y,
                 head: [['Staff', 'Attendance Days', 'Invoice Price (Rs.)']],
-                body: data.outsource_staff_lines.map(l => [l.NAME, Number(l.ATTEND_COUNT).toLocaleString(), fmtN(inv.INVOICE_PRICE / (data.outsource_staff_lines!.length || 1))]),
+                body: [
+                    ...data.outsource_staff_lines.map(l => [l.NAME, Number(l.ATTEND_COUNT).toLocaleString(), '—']),
+                    ...(data.outsource_ot_hours
+                        ? [['Extra OT Hours', `${Number(data.outsource_ot_hours).toFixed(2)} hrs`, fmtN(inv.INVOICE_PRICE)]]
+                        : []),
+                ],
                 foot: [['', 'Total Invoice Price', fmtN(inv.INVOICE_PRICE)]],
                 theme: 'striped',
                 headStyles: { fillColor: [4, 120, 87] },
@@ -329,9 +338,10 @@ const Invoices: React.FC = () => {
             [],
             ...(data.site.OT_TYPE === 'staff_outsource' && data.outsource_staff_lines && data.outsource_staff_lines.length > 0
                 ? [
-                    ['4. OUTSOURCE STAFF ATTENDANCE'],
+                    ['4. OUTSOURCE STAFF ATTENDANCE & OT'],
                     ['Staff', 'Attendance Days'],
                     ...data.outsource_staff_lines.map(l => [l.NAME, l.ATTEND_COUNT]),
+                    ...(data.outsource_ot_hours ? [['Extra OT Hours', `${Number(data.outsource_ot_hours).toFixed(2)} hrs`]] : []),
                     ['Total Invoice Price', inv.INVOICE_PRICE],
                   ]
                 : [
@@ -796,10 +806,35 @@ const Invoices: React.FC = () => {
                                                         );
                                                     })}
                                                 </tbody>
-                                                <tfoot><tr className="border-t-2 border-emerald-200">
-                                                    <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Invoice Price</td>
-                                                    <td className="pt-2.5 text-right font-black text-emerald-700">{fmt(outsourceInvoiceTotal)}</td>
-                                                </tr></tfoot>
+                                                <tfoot>
+                                                    <tr className="border-t border-slate-200">
+                                                        <td colSpan={4} className="pt-3 pb-1">
+                                                            <div className="flex items-center justify-between gap-4">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Extra OT Hours</span>
+                                                                    <span className="text-sm text-slate-400 font-mono">
+                                                                        {Number(preview.outsource_ot_hours || 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} hrs
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-3 shrink-0">
+                                                                    <input
+                                                                        type="number" min="0" step="any"
+                                                                        placeholder="Rate/hr"
+                                                                        value={otHoursPrice}
+                                                                        onChange={e => setOtHoursPrice(e.target.value)}
+                                                                        onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                                                        className="form-input w-28 px-2 py-1 text-sm text-right"
+                                                                    />
+                                                                    <span className="text-sm font-semibold text-emerald-700 w-28 text-right">{fmt(outsourceOtTotal)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    <tr className="border-t-2 border-emerald-200">
+                                                        <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Invoice Price</td>
+                                                        <td className="pt-2.5 text-right font-black text-emerald-700">{fmt(outsourceInvoiceTotal)}</td>
+                                                    </tr>
+                                                </tfoot>
                                             </table>
                                         </SectionCard>
                                     ) : (

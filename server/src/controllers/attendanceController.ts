@@ -8,7 +8,7 @@ export const getAttendance = async (req: Request, res: Response) => {
 
     try {
         let query = `
-        SELECT a.id, a.site_id, a.staff_id, a.attendance_date, a.in_time, a.out_time,
+        SELECT a.id, a.site_id, a.staff_id, TO_CHAR(a.attendance_date, 'YYYY-MM-DD') as attendance_date, a.in_time, a.out_time,
                u.name as staff_name, s.site_no, s.name as site_name, s.ot_type
         FROM attendance a
         JOIN sites s ON a.site_id = s.id
