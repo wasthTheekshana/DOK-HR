@@ -559,13 +559,17 @@ const Reports: React.FC = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {otReportData.map((row, idx) => (
-                                            <tr key={idx} className={`transition-colors ${row.IS_OT ? 'hover:bg-emerald-50/40' : 'hover:bg-slate-50/60 bg-slate-50/30'}`}>
+                                            <tr key={idx} className={`transition-colors ${row.IS_OT ? 'hover:bg-emerald-50/40' : row.IS_OUTSOURCE ? 'hover:bg-violet-50/40 bg-violet-50/20' : 'hover:bg-slate-50/60 bg-slate-50/30'}`}>
                                                 {!otSite && (
                                                     <td className="px-5 py-3.5 text-sm text-slate-500 whitespace-nowrap">{row.SITE_NO} - {row.SITE_NAME}</td>
                                                 )}
                                                 <td className="px-5 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap">{row.STAFF_NAME}</td>
                                                 <td className="px-5 py-3.5 text-center whitespace-nowrap">
-                                                    {row.IS_OT ? (
+                                                    {row.IS_OUTSOURCE ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-700">
+                                                            Outsource
+                                                        </span>
+                                                    ) : row.IS_OT ? (
                                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
                                                             OT
                                                         </span>

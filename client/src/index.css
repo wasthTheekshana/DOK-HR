@@ -280,3 +280,27 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
     gap: 12px;
     flex-wrap: wrap;
 }
+
+/* ── Responsive table wrapper ──────────────────────────── */
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ── Touch targets & iOS zoom prevention ───────────────── */
+@media (max-width: 640px) {
+    .btn { min-height: 40px; }
+    /* Prevent iOS Safari from zooming in on focused inputs (requires font >= 16px) */
+    input[type="text"],
+    input[type="password"],
+    input[type="date"],
+    input[type="time"],
+    input[type="number"],
+    input[type="email"],
+    input[type="search"],
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}

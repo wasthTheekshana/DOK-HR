@@ -649,7 +649,7 @@ const Tasks: React.FC = () => {
                                         {/* Staff header row */}
                                         <tr className="bg-slate-50">
                                             <td colSpan={4} className="px-5 py-2.5">
-                                                <div className="flex items-center gap-2.5">
+                                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
                                                     <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
                                                         {user.NAME.charAt(0).toUpperCase()}
                                                     </div>
