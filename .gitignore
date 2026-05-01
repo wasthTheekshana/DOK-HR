@@ -27,7 +27,8 @@ output.txt
 test_output*.txt
 tsc_log.txt
 jest_failure_log.txt
-
+csv_export/
+db_migration/csv/
 # ─── OS files ────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

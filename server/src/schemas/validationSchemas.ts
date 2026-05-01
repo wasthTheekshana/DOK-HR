@@ -3,6 +3,11 @@ import { z } from 'zod';
 const timeStr = z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').optional();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format');
 
+export const loginSchema = z.object({
+    epf_number: z.string().min(1, 'EPF number is required'),
+    password:   z.string().min(1, 'Password is required'),
+});
+
 export const createUserSchema = z.object({
     epf_number:    z.string().min(1).max(20),
     name:          z.string().min(1).max(100),

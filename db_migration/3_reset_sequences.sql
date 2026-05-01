@@ -1,0 +1,11 @@
+﻿SELECT setval(pg_get_serial_sequence('sites',                 'id'), COALESCE(MAX(id),1)) FROM sites;
+SELECT setval(pg_get_serial_sequence('users',                 'id'), COALESCE(MAX(id),1)) FROM users;
+SELECT setval(pg_get_serial_sequence('site_task_types',       'id'), COALESCE(MAX(id),1)) FROM site_task_types;
+SELECT setval(pg_get_serial_sequence('tasks',                 'id'), COALESCE(MAX(id),1)) FROM tasks;
+SELECT setval(pg_get_serial_sequence('attendance',            'id'), COALESCE(MAX(id),1)) FROM attendance;
+SELECT setval(pg_get_serial_sequence('custom_ot_records',     'id'), COALESCE(MAX(id),1)) FROM custom_ot_records;
+SELECT setval(pg_get_serial_sequence('payroll_saved_records', 'id'), COALESCE(MAX(id),1)) FROM payroll_saved_records;
+SELECT setval(pg_get_serial_sequence('cost_varient',          'id'), COALESCE(MAX(id),1)) FROM cost_varient;
+SELECT setval(pg_get_serial_sequence('profit_amount',         'id'), COALESCE(MAX(id),1)) FROM profit_amount;
+SELECT setval(pg_get_serial_sequence('poya_days',             'id'), COALESCE(MAX(id),1)) FROM poya_days;
+SELECT setval(pg_get_serial_sequence('temporary_assignments', 'id'), COALESCE(MAX(id),1)) FROM temporary_assignments;

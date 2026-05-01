@@ -271,7 +271,7 @@ const Payroll: React.FC = () => {
                     <h1 className="text-xl font-bold text-slate-900">Payroll</h1>
                     <p className="text-sm text-slate-500 mt-0.5">Calculate overtime and performance payments</p>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
                     {selectedSite && (
                         <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-sm font-semibold text-emerald-800">
                             <MapPin className="w-3.5 h-3.5 text-emerald-600" />

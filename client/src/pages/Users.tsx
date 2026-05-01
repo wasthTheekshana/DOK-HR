@@ -438,7 +438,7 @@ const Users: React.FC = () => {
                                 </div>
 
                                 {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
-                                    <div className="grid grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Basic Salary (Rs.)</label>
                                             <input type="number" min="0" step="1" value={basicSalary} onChange={e => setBasicSalary(e.target.value)}
