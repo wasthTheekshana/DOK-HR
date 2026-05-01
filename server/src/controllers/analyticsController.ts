@@ -192,7 +192,7 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
             execute<any>(
                 `SELECT u.name as staff_name,
                     ROUND(AVG(
-                        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+                        CASE WHEN a.in_time ~ '^\\d{2}:\\d{2}' AND a.out_time ~ '^\\d{2}:\\d{2}'
                         THEN (SUBSTRING(a.out_time, 1, 2)::numeric + SUBSTRING(a.out_time, 4, 2)::numeric/60)
                            - (SUBSTRING(a.in_time,  1, 2)::numeric + SUBSTRING(a.in_time,  4, 2)::numeric/60)
                         ELSE NULL END
@@ -203,7 +203,7 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
                    AND a.attendance_date <= :d_to
                  GROUP BY u.name
                  HAVING AVG(
-                    CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL
+                    CASE WHEN a.in_time ~ '^\\d{2}:\\d{2}' AND a.out_time ~ '^\\d{2}:\\d{2}'
                     THEN (SUBSTRING(a.out_time, 1, 2)::numeric + SUBSTRING(a.out_time, 4, 2)::numeric/60)
                        - (SUBSTRING(a.in_time,  1, 2)::numeric + SUBSTRING(a.in_time,  4, 2)::numeric/60)
                     ELSE NULL END
@@ -216,7 +216,7 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
                 `SELECT u.name as staff_name, COUNT(*) as late_count
                  FROM attendance a
                  JOIN users u ON a.staff_id = u.id
-                 WHERE a.out_time IS NOT NULL
+                 WHERE a.out_time ~ '^\\d{2}:\\d{2}'
                    AND SUBSTRING(a.out_time, 1, 2)::integer >= 17
                    AND a.attendance_date >= :d_from
                    AND a.attendance_date <= :d_to
@@ -1188,7 +1188,7 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         COUNT(DISTINCT t.staff_id)          AS unique_workers,
                         SUM(COALESCE(t.count, 0))           AS total_count,
                         ROUND(AVG(
-                            CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
+                            CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' AND t.out_time ~ '^\\d{2}:\\d{2}'
                             THEN (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
                                - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
                             ELSE NULL END
@@ -1209,9 +1209,9 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
                         COUNT(DISTINCT t.task_date)                   AS days_worked,
                         COUNT(*)                                       AS task_records,
                         SUM(COALESCE(t.count, 0))                     AS total_count,
-                        COUNT(CASE WHEN t.in_time IS NOT NULL THEN 1 END) AS records_with_time,
+                        COUNT(CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' THEN 1 END) AS records_with_time,
                         ROUND(AVG(
-                            CASE WHEN t.in_time IS NOT NULL AND t.out_time IS NOT NULL
+                            CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' AND t.out_time ~ '^\\d{2}:\\d{2}'
                             THEN (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
                                - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
                             ELSE NULL END
