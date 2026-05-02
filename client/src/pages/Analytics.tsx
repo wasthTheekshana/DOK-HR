@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
 import { format, subMonths, startOfMonth } from 'date-fns';
+import * as XLSX from 'xlsx';
 import {
     Users, MapPin, TrendingUp, TrendingDown, DollarSign, Clock,
     Target, BarChart3, AlertTriangle, Award, Calendar,
-    Activity
+    Activity, FileDown
 } from 'lucide-react';
 import {
     ResponsiveContainer,
@@ -1368,6 +1369,43 @@ const Analytics: React.FC = () => {
 
                 const OT_LABEL: Record<string, string> = { time_based: 'Time', target_based: 'Target', staff_outsource: 'Outsource' };
 
+                const downloadBreakdownExcel = () => {
+                    const tabLabel = invDetailTab === 'top_revenue' ? 'Top Revenue' :
+                                     invDetailTab === 'top_profit'  ? 'Top Profit'  :
+                                     invDetailTab === 'loss'        ? 'Loss Sites'  : 'All Sites';
+                    const headers = ['#', 'Site No', 'Site Name', 'Service Type', 'OT Type', 'Invoices',
+                                     'Revenue (Rs)', 'Cost Variants (Rs)', 'Salary+OT (Rs)',
+                                     'Total Cost (Rs)', 'Net Profit/Loss (Rs)', 'Margin (%)'];
+                    const rows = detailRows.map((row: any, i: number) => [
+                        i + 1,
+                        row.site_no,
+                        row.site_name,
+                        row.service_type || '',
+                        OT_LABEL[row.ot_type] || row.ot_type,
+                        row.invoice_count,
+                        Number(row.total_revenue) || 0,
+                        Number(row.cost_variant)  || 0,
+                        Number(row.salary_ot)     || 0,
+                        Number(row.total_cost)    || 0,
+                        Number(row.net_profit)    || 0,
+                        Number(row.profit_margin) || 0,
+                    ]);
+                    const totalRow = [
+                        '', '', '', '', 'TOTAL', '',
+                        Number(sm.total_revenue)     || 0,
+                        Number(sm.total_cost_variant)|| 0,
+                        Number(sm.total_salary_ot)   || 0,
+                        Number(sm.total_cost)        || 0,
+                        Number(sm.net_profit)        || 0,
+                        Number(sm.profit_margin)     || 0,
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totalRow]);
+                    ws['!cols'] = [4,10,20,14,10,8,14,14,14,14,16,10].map(w => ({ wch: w }));
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, tabLabel);
+                    XLSX.writeFile(wb, `Invoice_Breakdown_${tabLabel.replace(/ /g,'_')}_${dateFrom}_${dateTo}.xlsx`);
+                };
+
                 return (
                     <div className="space-y-5">
                         <SectionHeader icon={DollarSign} title="Invoice Business Model Analysis"
@@ -1509,7 +1547,11 @@ const Analytics: React.FC = () => {
                                                 {t.label}
                                             </button>
                                         ))}
-                                        <span className="ml-auto text-xs text-slate-400">{detailRows.length} sites</span>
+                                        <span className="text-xs text-slate-400">{detailRows.length} sites</span>
+                                        <button onClick={downloadBreakdownExcel}
+                                            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-all shadow-sm">
+                                            <FileDown className="w-3.5 h-3.5" /> Download Excel
+                                        </button>
                                     </div>
                                     {detailRows.length === 0 ? (
                                         <div className="py-10 text-center text-slate-400 text-sm">

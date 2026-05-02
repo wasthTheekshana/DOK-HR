@@ -80,7 +80,9 @@ const Dashboard: React.FC = () => {
     const [slideIndex, setSlideIndex]         = useState(0);
     const [isPaused,   setIsPaused]           = useState(false);
     const [currentTime, setCurrentTime]       = useState('');
-    const [timeRange, setTimeRange]           = useState<'month' | '3m' | '6m' | 'ytd'>('month');
+    const [timeRange, setTimeRange]           = useState<'month' | '3m' | '6m' | 'ytd' | 'custom'>('month');
+    const [customFrom, setCustomFrom]         = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+    const [customTo,   setCustomTo]           = useState(format(new Date(), 'yyyy-MM-dd'));
     const [siteDetails, setSiteDetails]       = useState<Record<string, any>>({});
     const [siteDetailLoading, setSiteDetailLoading] = useState(false);
     const [currentSiteId, setCurrentSiteId]   = useState<number | null>(null);
@@ -118,13 +120,8 @@ const Dashboard: React.FC = () => {
     }, []);
 
     const ceoDateRange = useCallback(() => {
-        const now = new Date();
-        const to  = format(now, 'yyyy-MM-dd');
-        if (timeRange === '3m')  return { from: format(subMonths(now, 3), 'yyyy-MM-dd'), to };
-        if (timeRange === '6m')  return { from: format(subMonths(now, 6), 'yyyy-MM-dd'), to };
-        if (timeRange === 'ytd') return { from: `${now.getFullYear()}-01-01`, to };
-        return { from: format(startOfMonth(now), 'yyyy-MM-dd'), to };
-    }, [timeRange]);
+        return { from: customFrom, to: customTo };
+    }, [customFrom, customTo]);
 
     useEffect(() => {
         if (role !== 'system_admin') return;
@@ -325,11 +322,24 @@ const Dashboard: React.FC = () => {
             pct === null ? 'bg-slate-300' : pct >= 100 ? 'bg-emerald-500' : pct >= 80 ? 'bg-amber-500' : 'bg-red-500';
 
         const TIME_RANGES = [
-            { key: 'month', label: 'This Month' },
-            { key: '3m',    label: '3 Months'   },
-            { key: '6m',    label: '6 Months'   },
-            { key: 'ytd',   label: 'YTD'        },
+            { key: 'month', label: 'Month' },
+            { key: '3m',    label: '3M'    },
+            { key: '6m',    label: '6M'    },
+            { key: 'ytd',   label: 'YTD'   },
         ] as const;
+
+        const applyPreset = (key: typeof TIME_RANGES[number]['key']) => {
+            const now = new Date();
+            const to  = format(now, 'yyyy-MM-dd');
+            let from: string;
+            if (key === '3m')  from = format(subMonths(now, 3), 'yyyy-MM-dd');
+            else if (key === '6m')  from = format(subMonths(now, 6), 'yyyy-MM-dd');
+            else if (key === 'ytd') from = `${now.getFullYear()}-01-01`;
+            else                    from = format(startOfMonth(now), 'yyyy-MM-dd');
+            setTimeRange(key);
+            setCustomFrom(from);
+            setCustomTo(to);
+        };
 
         const handleRefresh = () => {
             setSiteDetails({});
@@ -362,19 +372,30 @@ const Dashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Time range tabs */}
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-                        {TIME_RANGES.map(tr => (
-                            <button key={tr.key}
-                                onClick={() => setTimeRange(tr.key)}
-                                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
-                                    timeRange === tr.key
-                                        ? 'bg-white text-indigo-700 shadow-sm'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                }`}>
-                                {tr.label}
-                            </button>
-                        ))}
+                    {/* Time range: presets + always-visible date inputs */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+                            {TIME_RANGES.map(tr => (
+                                <button key={tr.key}
+                                    onClick={() => applyPreset(tr.key)}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                                        timeRange === tr.key
+                                            ? 'bg-white text-indigo-700 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}>
+                                    {tr.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <input type="date" value={customFrom}
+                                onChange={e => { setCustomFrom(e.target.value); setTimeRange('custom'); }}
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                            <span className="text-slate-400 text-[11px]">→</span>
+                            <input type="date" value={customTo}
+                                onChange={e => { setCustomTo(e.target.value); setTimeRange('custom'); }}
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-[11px] text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2 sm:gap-4">
