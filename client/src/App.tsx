@@ -16,6 +16,7 @@ import SitePerformance from './pages/SitePerformance';
 import TimeSitePerformance from './pages/TimeSitePerformance';
 import Invoices from './pages/Invoices';
 import TaskSummary from './pages/TaskSummary';
+import InvoiceAnalysis from './pages/InvoiceAnalysis';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -54,6 +55,7 @@ function App() {
             <Route path="time-site-performance" element={<TimeSitePerformance />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="task-summary" element={<TaskSummary />} />
+            <Route path="invoice-analysis" element={<InvoiceAnalysis />} />
           </Route>
         </Routes>
       </AuthProvider>
