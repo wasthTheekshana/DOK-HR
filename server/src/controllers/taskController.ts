@@ -491,7 +491,8 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
         });
 
         const aggregatedData = Array.from(staffMap.values()).map((entry: any) => {
-            const isOT = !entry.IS_OUTSOURCE && entry.OT_PERCENTAGE > 0;
+            // 90% = fix count: hours tracked but no OT payment
+            const isOT = !entry.IS_OUTSOURCE && entry.OT_PERCENTAGE > 0 && entry.OT_PERCENTAGE !== 90;
             const { payment, rate: otRate } = isOT
                 ? calculateTimeBasedPayment(entry.TOTAL_EXTRA_HRS, entry.BASIC_SALARY)
                 : { payment: 0, rate: 0 };

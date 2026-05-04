@@ -324,13 +324,13 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
             let otRate: number;
             let calculationType: string;
 
-            // Different calculation for 90% staff vs custom OT staff
+            // Different calculation for fix-count (90%) vs custom OT staff
             if (otPercentage === 90) {
-                // 90% staff: Direct formula Extra Hours * 150
-                calculationType = '90% Fixed';
-                adjustedExtraHours = extraHours; // No adjustment for 90% staff
-                extraPayment = extraHours * 150;
-                otRate = 150; // Fixed rate for 90% staff
+                // Fix count staff: extra hours recorded but OT payment is 0
+                calculationType = 'Fix Count';
+                adjustedExtraHours = extraHours;
+                extraPayment = 0;
+                otRate = 0;
             } else {
                 // Custom OT staff: Apply custom percentage if provided
                 calculationType = 'Custom %';
