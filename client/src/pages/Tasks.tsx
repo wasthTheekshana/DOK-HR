@@ -640,7 +640,8 @@ const Tasks: React.FC = () => {
                                 const site = getSite();
                                 const siteTaskTypes = site?.TASK_TYPES || [];
                                 const siteOtType = site?.OT_TYPE || 'time_based';
-                                const isTimeBased = siteOtType === 'time_based' || siteOtType === 'staff_outsource' || siteOtType === 'target_based';
+                                const isTimeBased  = siteOtType === 'time_based' || siteOtType === 'staff_outsource';
+                                const showTimeCols = isTimeBased || siteOtType === 'target_based';
                                 const userTasks = tasks.filter(t => t.STAFF_ID === user.ID);
                                 const userNewDrafts = newDrafts[user.ID] || [];
 
@@ -700,7 +701,7 @@ const Tasks: React.FC = () => {
                                                             : <span className="text-sm font-mono text-slate-700">{task.COUNT ?? 0}</span>}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {isTimeBased
+                                                        {showTimeCols
                                                             ? isEditing
                                                                 ? <input type="time" value={ed.IN_TIME || ''} onChange={e => updateEditDraft(task.ID, 'IN_TIME', e.target.value)}
                                                                     className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -708,7 +709,7 @@ const Tasks: React.FC = () => {
                                                             : <span className="text-slate-300 text-sm">—</span>}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {isTimeBased
+                                                        {showTimeCols
                                                             ? isEditing
                                                                 ? <input type="time" value={ed.OUT_TIME || ''} onChange={e => updateEditDraft(task.ID, 'OUT_TIME', e.target.value)}
                                                                     className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
@@ -764,13 +765,13 @@ const Tasks: React.FC = () => {
                                                             className="w-20 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center" placeholder="0" />
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {isTimeBased
+                                                        {showTimeCols
                                                             ? <input type="time" value={draft.IN_TIME || ''} onChange={e => updateNewDraft(user.ID, draft._tid, 'IN_TIME', e.target.value)}
                                                                 className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
                                                             : <span className="text-slate-300 text-sm">—</span>}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {isTimeBased
+                                                        {showTimeCols
                                                             ? <input type="time" value={draft.OUT_TIME || ''} onChange={e => updateNewDraft(user.ID, draft._tid, 'OUT_TIME', e.target.value)}
                                                                 className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
                                                             : <span className="text-slate-300 text-sm">—</span>}
