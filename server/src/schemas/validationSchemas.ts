@@ -48,7 +48,7 @@ export const createSiteSchema = z.object({
     supervisor_id:       z.number().int().positive().optional().nullable(),
     task_invoice_price:  z.number().min(0).optional(),
     daily_target:        z.number().min(0).optional(),
-    ot_type:             z.enum(['time_based', 'staff_outsource']).optional(),
+    ot_type:             z.enum(['time_based', 'target_based', 'staff_outsource']).optional(),
     service_type:        z.string().max(100).optional().nullable(),
     site_type:           z.string().max(100).optional().nullable(),
     task_types:          z.array(taskTypeSchema).optional(),
