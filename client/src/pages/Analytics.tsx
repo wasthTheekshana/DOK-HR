@@ -1569,7 +1569,7 @@ const Analytics: React.FC = () => {
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 uppercase tracking-wider">Revenue</th>
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wider hidden md:table-cell">Variants</th>
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-violet-600 uppercase tracking-wider hidden md:table-cell">Salary+OT</th>
-                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-rose-600 uppercase tracking-wider">Cost</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-rose-600 uppercase tracking-wider">Total Cost</th>
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Profit/Loss</th>
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Margin</th>
                                                     </tr>
