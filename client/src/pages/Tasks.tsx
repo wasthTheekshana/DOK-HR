@@ -640,7 +640,7 @@ const Tasks: React.FC = () => {
                                 const site = getSite();
                                 const siteTaskTypes = site?.TASK_TYPES || [];
                                 const siteOtType = site?.OT_TYPE || 'time_based';
-                                const isTimeBased = siteOtType === 'time_based' || siteOtType === 'staff_outsource';
+                                const isTimeBased = siteOtType === 'time_based' || siteOtType === 'staff_outsource' || siteOtType === 'target_based';
                                 const userTasks = tasks.filter(t => t.STAFF_ID === user.ID);
                                 const userNewDrafts = newDrafts[user.ID] || [];
 
