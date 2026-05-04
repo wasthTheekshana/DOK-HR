@@ -41,6 +41,7 @@ const Invoices: React.FC = () => {
     const [additionalCosts, setAdditionalCosts] = useState<{ key: string; value: string }[]>([]);
     const [outsourceLines,  setOutsourceLines]  = useState<(InvoiceOutsourceStaffLine & { price: string })[]>([]);
     const [otHoursPrice,    setOtHoursPrice]    = useState('');
+    const [nopay,           setNopay]           = useState('');
     const [saving, setSaving]               = useState(false);
 
     // ── Edit modal ──
@@ -67,7 +68,7 @@ const Invoices: React.FC = () => {
     const openModal = () => {
         setSelectedSiteId(''); setDateFrom(''); setDateTo('');
         setPreview(null);
-        setEditedVariants([]); setAdditionalCosts([]); setOutsourceLines([]); setOtHoursPrice('');
+        setEditedVariants([]); setAdditionalCosts([]); setOutsourceLines([]); setOtHoursPrice(''); setNopay('');
         setIsModalOpen(true);
     };
 
@@ -117,7 +118,9 @@ const Invoices: React.FC = () => {
             const allVariants = [
                 ...editedVariants,
                 ...additionalCosts.map(r => ({ key: r.key.trim(), value: r.value })),
+                { key: 'Admin Cost (5%)', value: String(adminCostAmount.toFixed(2)) },
             ];
+            const adjustedSalaryOT = Math.max(0, preview.salary_ot_amount - nopayAmount);
             await api.post('/invoices', {
                 site_id:          preview.site.ID,
                 site_no:          preview.site.SITE_NO,
@@ -125,7 +128,7 @@ const Invoices: React.FC = () => {
                 date_from:        preview.date_from,
                 date_to:          preview.date_to,
                 cost_variants:    allVariants,
-                salary_ot_amount: preview.salary_ot_amount,
+                salary_ot_amount: adjustedSalaryOT,
                 invoice_price:    isOutsource ? outsourceInvoiceTotal : preview.total_invoice_price,
             });
             setIsModalOpen(false); fetchInvoices();
@@ -366,7 +369,7 @@ const Invoices: React.FC = () => {
         XLSX.writeFile(wb, `Invoice_${inv.SITE_NO}_${inv.DATE_FROM}_${inv.DATE_TO}.xlsx`);
     };
 
-    const computedCostVariantTotal =
+    const computedCostVariantBase =
         editedVariants.reduce((s, v) => {
             const n = parseFloat(v.value);
             return s + (isNaN(n) ? 0 : n);
@@ -375,6 +378,9 @@ const Invoices: React.FC = () => {
             const n = parseFloat(v.value);
             return s + (isNaN(n) ? 0 : n);
         }, 0);
+    const adminCostAmount         = computedCostVariantBase * 0.05;
+    const computedCostVariantTotal = computedCostVariantBase + adminCostAmount;
+    const nopayAmount             = parseFloat(nopay) || 0;
 
     const totalInvoiceValue = invoices.reduce((s, inv) => s + Number(inv.INVOICE_PRICE || 0), 0);
 
@@ -663,10 +669,20 @@ const Invoices: React.FC = () => {
                                                             </tr>
                                                         ))}
                                                     </tbody>
-                                                    <tfoot><tr className="border-t-2 border-amber-200">
-                                                        <td colSpan={2} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Cost Variants</td>
-                                                        <td className="pt-2.5 text-right font-black text-amber-700">{fmt(computedCostVariantTotal)}</td>
-                                                    </tr></tfoot>
+                                                    <tfoot>
+                                                        <tr className="border-t border-amber-100">
+                                                            <td colSpan={2} className="pt-2 text-xs text-slate-500">Sub-total</td>
+                                                            <td className="pt-2 text-right text-sm text-amber-600">{fmt(computedCostVariantBase)}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td colSpan={2} className="pt-1 text-xs text-slate-500">Admin Cost (5%)</td>
+                                                            <td className="pt-1 text-right text-sm text-amber-600">{fmt(adminCostAmount)}</td>
+                                                        </tr>
+                                                        <tr className="border-t-2 border-amber-200">
+                                                            <td colSpan={2} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Cost Variants</td>
+                                                            <td className="pt-2.5 text-right font-black text-amber-700">{fmt(computedCostVariantTotal)}</td>
+                                                        </tr>
+                                                    </tfoot>
                                                 </table>
                                             )}
                                     </SectionCard>
@@ -738,10 +754,34 @@ const Invoices: React.FC = () => {
                                                             </tr>
                                                         ))}
                                                     </tbody>
-                                                    <tfoot><tr className="border-t-2 border-violet-200">
-                                                        <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Salaries</td>
-                                                        <td className="pt-2.5 text-right font-black text-violet-700">{fmt(preview.total_salary)}</td>
-                                                    </tr></tfoot>
+                                                    <tfoot>
+                                                        <tr className="border-t border-violet-100">
+                                                            <td colSpan={3} className="pt-2 text-xs text-slate-500">Gross Total Salaries</td>
+                                                            <td className="pt-2 text-right text-sm text-violet-600">{fmt(preview.total_salary)}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td colSpan={3} className="pt-1.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs text-rose-600 font-semibold whitespace-nowrap">No Pay Deduction (Rs.)</span>
+                                                                    <input
+                                                                        type="number" min="0" step="0.01"
+                                                                        placeholder="0.00"
+                                                                        value={nopay}
+                                                                        onChange={e => setNopay(e.target.value)}
+                                                                        onKeyDown={e => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
+                                                                        className="form-input w-36 px-2 py-1 text-sm text-rose-700 border-rose-200 focus:ring-rose-300"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            <td className="pt-1.5 text-right text-sm font-semibold text-rose-600">
+                                                                {nopayAmount > 0 ? `− ${fmt(nopayAmount)}` : '—'}
+                                                            </td>
+                                                        </tr>
+                                                        <tr className="border-t-2 border-violet-200">
+                                                            <td colSpan={3} className="pt-2.5 text-xs font-bold text-slate-600 uppercase tracking-wide">Total Salaries</td>
+                                                            <td className="pt-2.5 text-right font-black text-violet-700">{fmt(Math.max(0, preview.total_salary - nopayAmount))}</td>
+                                                        </tr>
+                                                    </tfoot>
                                                 </table>
                                             )}
                                     </SectionCard>
@@ -763,7 +803,7 @@ const Invoices: React.FC = () => {
                                             </div>
                                             <div className="flex justify-between items-center pt-2 border-t-2 border-violet-200">
                                                 <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Salary + OT Combined</span>
-                                                <span className="font-black text-violet-700">{fmt(preview.salary_ot_amount)}</span>
+                                                <span className="font-black text-violet-700">{fmt(Math.max(0, preview.salary_ot_amount - nopayAmount))}</span>
                                             </div>
                                         </div>
                                     </SectionCard>
