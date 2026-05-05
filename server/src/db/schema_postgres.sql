@@ -11,6 +11,7 @@ CREATE TABLE sites (
   ot_type            VARCHAR(30) DEFAULT 'time_based' CHECK (ot_type IN ('time_based','target_based','staff_outsource')),
   service_type       VARCHAR(50),
   site_type          VARCHAR(50),
+  status             VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active','inactive')) NOT NULL,
   created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

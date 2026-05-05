@@ -28,6 +28,7 @@ export interface Site {
     TASK_INVOICE_PRICE?: number;
     DAILY_TARGET?: number;
     OT_TYPE?: 'time_based' | 'target_based' | 'staff_outsource';
+    STATUS?: 'active' | 'inactive';
     SERVICE_TYPE?: string;
     SITE_TYPE?: string;
     TASK_TYPES?: SiteTaskType[];
