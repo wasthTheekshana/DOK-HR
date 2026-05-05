@@ -300,7 +300,7 @@ export const getCustomOTReport = async (req: Request, res: Response) => {
             JOIN sites s ON t.site_id = s.id
             JOIN users u ON t.staff_id = u.id
             WHERE t.task_date BETWEEN :date_from AND :date_to
-              AND s.ot_type != 'staff_outsource'
+              AND s.ot_type = 'time_based'
         `;
 
         const params: any = { date_from: String(date_from), date_to: String(date_to) };

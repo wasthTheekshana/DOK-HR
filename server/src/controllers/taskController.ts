@@ -23,6 +23,14 @@ async function syncAttendance(
                  SET in_time = EXCLUDED.in_time, out_time = EXCLUDED.out_time, updated_at = CURRENT_TIMESTAMP`,
                 { site_id, staff_id, att_date: task_date, in_time: in_time || null, out_time: out_time || null }
             );
+        } else if (ot_type === 'target_based') {
+            await execute(
+                `INSERT INTO attendance (site_id, staff_id, attendance_date, in_time, out_time)
+                 VALUES (:site_id, :staff_id, :att_date, :in_time, :out_time)
+                 ON CONFLICT (staff_id, site_id, attendance_date) DO UPDATE
+                 SET in_time = EXCLUDED.in_time, out_time = EXCLUDED.out_time, updated_at = CURRENT_TIMESTAMP`,
+                { site_id, staff_id, att_date: task_date, in_time: in_time || null, out_time: out_time || null }
+            );
         } else {
             await execute(
                 `INSERT INTO attendance (site_id, staff_id, attendance_date)
@@ -407,7 +415,7 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
             JOIN sites s ON t.site_id = s.id
             WHERE t.task_date BETWEEN :date_from AND :date_to
               AND t.out_time IS NOT NULL
-              AND s.ot_type != 'staff_outsource'
+              AND s.ot_type = 'time_based'
         `;
 
         const params: any = {
@@ -434,7 +442,7 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
             staffMap.get(key)!.TOTAL_EXTRA_HRS += extraHours;
         };
 
-        // Time-based / target-based sites — from tasks table
+        // Time-based sites only — from tasks table
         rows.forEach((row: any) => {
             const dayType = getDayType(String(row.TASK_DATE), poyaDates);
             const extraHours = calculateTimeBasedExtra(

@@ -33,7 +33,7 @@ export const updateUserSchema = z.object({
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
 
 const taskTypeSchema = z.object({
-    task_name:     z.string().min(1).max(100),
+    task_name:     z.string().min(1).max(200),
     invoice_price: z.number().min(0),
 });
 
@@ -49,6 +49,7 @@ export const createSiteSchema = z.object({
     task_invoice_price:  z.number().min(0).optional(),
     daily_target:        z.number().min(0).optional(),
     ot_type:             z.enum(['time_based', 'target_based', 'staff_outsource']).optional(),
+    status:              z.enum(['active', 'inactive']).optional(),
     service_type:        z.string().max(100).optional().nullable(),
     site_type:           z.string().max(100).optional().nullable(),
     task_types:          z.array(taskTypeSchema).optional(),

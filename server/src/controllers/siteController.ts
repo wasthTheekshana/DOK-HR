@@ -5,8 +5,10 @@ export const getSites = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
     const userId = (req as any).user.id;
     try {
+        const { status: statusFilter } = req.query;
+
         let query = `SELECT s.id, s.site_no, s.name, s.supervisor_id, s.task_invoice_price, s.daily_target,
-              s.ot_type, s.service_type, s.site_type,
+              s.ot_type, s.service_type, s.site_type, s.status,
               u.name as supervisor_name,
               status_counts.staff_count
        FROM sites s
@@ -25,6 +27,13 @@ export const getSites = async (req: Request, res: Response) => {
             query += ` AND s.supervisor_id = :userId`;
             params.userId = userId;
         }
+
+        if (statusFilter && (statusFilter === 'active' || statusFilter === 'inactive')) {
+            query += ` AND s.status = :statusFilter`;
+            params.statusFilter = statusFilter;
+        }
+
+        query += ` ORDER BY s.status ASC, s.site_no ASC`;
 
         const result = await execute<any>(query, params);
         const sites = result.rows || [];
@@ -95,11 +104,11 @@ export const getSiteById = async (req: Request, res: Response) => {
 };
 
 export const createSite = async (req: Request, res: Response) => {
-    const { site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, service_type, site_type, task_types, cost_factors } = req.body;
+    const { site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
         const siteResult = await execute<any>(
-            `INSERT INTO sites (site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, service_type, site_type)
-             VALUES (:site_no, :name, :supervisor_id, :task_invoice_price, :daily_target, :ot_type, :service_type, :site_type)
+            `INSERT INTO sites (site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
+             VALUES (:site_no, :name, :supervisor_id, :task_invoice_price, :daily_target, :ot_type, :status, :service_type, :site_type)
              RETURNING id`,
             {
                 site_no,
@@ -108,6 +117,7 @@ export const createSite = async (req: Request, res: Response) => {
                 task_invoice_price: task_invoice_price || 0,
                 daily_target: daily_target || 0,
                 ot_type: ot_type || 'time_based',
+                status: status || 'active',
                 service_type: service_type || null,
                 site_type: site_type || null,
             }
@@ -151,7 +161,7 @@ export const createSite = async (req: Request, res: Response) => {
 
 export const updateSite = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, supervisor_id, task_invoice_price, daily_target, ot_type, service_type, site_type, task_types, cost_factors } = req.body;
+    const { name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
         await execute(
             `UPDATE sites
@@ -160,6 +170,7 @@ export const updateSite = async (req: Request, res: Response) => {
                  task_invoice_price = :task_invoice_price,
                  daily_target = :daily_target,
                  ot_type = :ot_type,
+                 status = :status,
                  service_type = :service_type,
                  site_type = :site_type,
                  updated_at = CURRENT_TIMESTAMP
@@ -170,6 +181,7 @@ export const updateSite = async (req: Request, res: Response) => {
                 task_invoice_price: task_invoice_price || 0,
                 daily_target: daily_target || 0,
                 ot_type: ot_type || 'time_based',
+                status: status || 'active',
                 service_type: service_type || null,
                 site_type: site_type || null,
                 id: String(id)
@@ -186,8 +198,8 @@ export const updateSite = async (req: Request, res: Response) => {
             }
         }
 
-        await execute(`DELETE FROM cost_varient WHERE site_id = :id`, { id: String(id) });
-        if (cost_factors && Array.isArray(cost_factors) && cost_factors.length > 0) {
+        if (cost_factors && Array.isArray(cost_factors)) {
+            await execute(`DELETE FROM cost_varient WHERE site_id = :id`, { id: String(id) });
             for (const factor of cost_factors) {
                 if (factor.key && factor.key.trim()) {
                     await execute(
@@ -208,6 +220,24 @@ export const updateSite = async (req: Request, res: Response) => {
         res.json({ message: 'Site updated successfully' });
     } catch (err) {
         console.error('updateSite error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const patchSiteStatus = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (status !== 'active' && status !== 'inactive') {
+        return res.status(400).json({ message: 'status must be active or inactive' });
+    }
+    try {
+        await execute(
+            `UPDATE sites SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE id = :id`,
+            { status, id: String(id) }
+        );
+        res.json({ message: 'Site status updated' });
+    } catch (err) {
+        console.error('patchSiteStatus error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 };

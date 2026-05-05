@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { Site, User } from '../types';
-import { Plus, Edit, Trash2, MapPin, Users as UsersIcon, Target, Clock, X, Briefcase, Building2, DollarSign, Eye, ChevronRight, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, MapPin, Users as UsersIcon, Target, Clock, X, Briefcase, Building2, DollarSign, Eye, ChevronRight, Search, PowerOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const SERVICE_TYPES = ['Physical', 'Scanning', 'Data entry', 'Insurance Policy', 'Staff outsource', 'DMS'];
@@ -19,8 +19,9 @@ const Sites: React.FC = () => {
     const [supervisors, setSupervisors] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Search
+    // Search + status filter
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
 
     // Modals
     const [isFormOpen, setIsFormOpen]     = useState(false);
@@ -37,6 +38,7 @@ const Sites: React.FC = () => {
     const [siteType, setSiteType]         = useState('');
     const [taskTypes, setTaskTypes]       = useState<{ task_name: string; invoice_price: number }[]>([]);
     const [costFactors, setCostFactors]   = useState<{ key: string; value: string }[]>([]);
+    const [siteStatus, setSiteStatus]     = useState<'active' | 'inactive'>('active');
     const [saving, setSaving]             = useState(false);
 
     useEffect(() => { fetchSites(); fetchSupervisors(); }, []);
@@ -53,7 +55,7 @@ const Sites: React.FC = () => {
 
     const resetForm = () => {
         setSiteNo(''); setName(''); setSupervisorId('');
-        setDailyTarget(0); setOtType('time_based');
+        setDailyTarget(0); setOtType('time_based'); setSiteStatus('active');
         setServiceType(''); setSiteType('');
         setTaskTypes([{ task_name: '', invoice_price: 0 }]);
         setCostFactors([]);
@@ -69,6 +71,7 @@ const Sites: React.FC = () => {
             const validOtTypes = ['time_based', 'target_based', 'staff_outsource'] as const;
             const ot = validOtTypes.includes(site.OT_TYPE as any) ? (site.OT_TYPE as 'time_based' | 'target_based' | 'staff_outsource') : 'time_based';
             setOtType(ot);
+            setSiteStatus(site.STATUS === 'inactive' ? 'inactive' : 'active');
             setServiceType(site.SERVICE_TYPE || '');
             setSiteType(site.SITE_TYPE || '');
             setTaskTypes(site.TASK_TYPES?.length ? site.TASK_TYPES.map(t => ({ task_name: t.TASK_NAME, invoice_price: t.INVOICE_PRICE })) : []);
@@ -86,6 +89,16 @@ const Sites: React.FC = () => {
         catch { alert('Failed to delete site'); }
     };
 
+    const handleToggleStatus = async (site: Site) => {
+        const newStatus = site.STATUS === 'inactive' ? 'active' : 'inactive';
+        const label = newStatus === 'inactive' ? 'deactivate' : 'activate';
+        if (!confirm(`${label.charAt(0).toUpperCase() + label.slice(1)} "${site.NAME}"? The site data will be kept.`)) return;
+        try {
+            await api.patch(`/sites/${site.ID}/status`, { status: newStatus });
+            fetchSites();
+        } catch { alert('Failed to update site status'); }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault(); setSaving(true);
         try {
@@ -95,6 +108,7 @@ const Sites: React.FC = () => {
                 task_invoice_price: 0,
                 daily_target: dailyTarget || 0,
                 ot_type: otType,
+                status: siteStatus,
                 service_type: serviceType || null,
                 site_type: siteType || null,
                 task_types: taskTypes.filter(t => t.task_name.trim()),
@@ -117,6 +131,7 @@ const Sites: React.FC = () => {
         setCostFactors(costFactors.map((f, idx) => idx === i ? { ...f, [field]: value } : f));
 
     const filteredSites = sites.filter(site => {
+        if (statusFilter !== 'all' && (site.STATUS || 'active') !== statusFilter) return false;
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         const otLabel = OT_TYPE_CONFIG[site.OT_TYPE as keyof typeof OT_TYPE_CONFIG]?.label || '';
@@ -144,14 +159,20 @@ const Sites: React.FC = () => {
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-slate-900">Sites &amp; Locations</h1>
                     <p className="text-slate-500 text-sm mt-0.5">
-                        {search.trim() ? (
-                            <>{filteredSites.length} of {sites.length} site{sites.length !== 1 ? 's' : ''}</>
-                        ) : (
-                            <>{sites.length} operational site{sites.length !== 1 ? 's' : ''}</>
-                        )}
+                        {filteredSites.length} of {sites.length} site{sites.length !== 1 ? 's' : ''}
+                        {statusFilter !== 'all' && <span className={`ml-1.5 font-semibold ${statusFilter === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>({statusFilter})</span>}
                     </p>
                 </div>
-                <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    {/* Status filter tabs */}
+                    <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
+                        {(['active', 'inactive', 'all'] as const).map(s => (
+                            <button key={s} onClick={() => setStatusFilter(s)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${statusFilter === s ? s === 'active' ? 'bg-emerald-500 text-white shadow-sm' : s === 'inactive' ? 'bg-slate-500 text-white shadow-sm' : 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                            </button>
+                        ))}
+                    </div>
                     {/* Search bar */}
                     <div className="relative flex-1 sm:flex-none">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -168,7 +189,7 @@ const Sites: React.FC = () => {
                             </button>
                         )}
                     </div>
-                    {role === 'admin' && (
+                    {(role === 'admin' || role === 'system_admin') && (
                         <button onClick={() => handleOpenForm()} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm shadow-indigo-500/25 text-sm whitespace-nowrap">
                             <Plus className="w-4 h-4" /> Add New Site
                         </button>
@@ -184,7 +205,7 @@ const Sites: React.FC = () => {
                     </div>
                     <h3 className="text-lg font-bold text-slate-700 mb-2">No sites yet</h3>
                     <p className="text-slate-400 text-sm mb-5">Get started by creating your first operational site</p>
-                    {role === 'admin' && (
+                    {(role === 'admin' || role === 'system_admin') && (
                         <button onClick={() => handleOpenForm()} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm">
                             <Plus className="w-4 h-4" /> Add First Site
                         </button>
@@ -198,6 +219,7 @@ const Sites: React.FC = () => {
                                 <tr className="border-b border-slate-100 bg-slate-50/70">
                                     <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Site No</th>
                                     <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Site Name</th>
+                                    <th className="hidden sm:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                     <th className="hidden sm:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Service Type</th>
                                     <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Site Type</th>
                                     <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">OT Type</th>
@@ -211,7 +233,7 @@ const Sites: React.FC = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {filteredSites.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="px-4 py-10 text-center">
+                                        <td colSpan={11} className="px-4 py-10 text-center">
                                             <Search className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                                             <p className="text-sm font-semibold text-slate-400">No sites match &quot;{search}&quot;</p>
                                             <button onClick={() => setSearch('')} className="mt-2 text-xs text-indigo-500 hover:underline">Clear search</button>
@@ -231,11 +253,23 @@ const Sites: React.FC = () => {
                                             {/* Site Name */}
                                             <td className="px-4 py-3.5">
                                                 <div className="flex items-center gap-2.5">
-                                                    <div className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
-                                                        <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${site.STATUS === 'inactive' ? 'bg-slate-100' : 'bg-blue-50'}`}>
+                                                        <MapPin className={`w-3.5 h-3.5 ${site.STATUS === 'inactive' ? 'text-slate-400' : 'text-blue-500'}`} />
                                                     </div>
-                                                    <span className="font-semibold text-slate-800 whitespace-nowrap">{site.NAME}</span>
+                                                    <span className={`font-semibold whitespace-nowrap ${site.STATUS === 'inactive' ? 'text-slate-400' : 'text-slate-800'}`}>{site.NAME}</span>
                                                 </div>
+                                            </td>
+                                            {/* Status */}
+                                            <td className="hidden sm:table-cell px-4 py-3.5 whitespace-nowrap">
+                                                {site.STATUS === 'inactive' ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-500">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Inactive
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+                                                    </span>
+                                                )}
                                             </td>
                                             {/* Service Type */}
                                             <td className="hidden sm:table-cell px-4 py-3.5 whitespace-nowrap">
@@ -300,7 +334,15 @@ const Sites: React.FC = () => {
                                                     >
                                                         <Eye className="w-3.5 h-3.5" /> View
                                                     </button>
-                                                    {role === 'admin' && (<>
+                                                    {(role === 'admin' || role === 'system_admin') && (<>
+                                                        <button
+                                                            onClick={() => handleToggleStatus(site)}
+                                                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-semibold ${site.STATUS === 'inactive' ? 'bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
+                                                            title={site.STATUS === 'inactive' ? 'Activate' : 'Deactivate'}
+                                                        >
+                                                            <PowerOff className="w-3.5 h-3.5" />
+                                                            {site.STATUS === 'inactive' ? 'Activate' : 'Deactivate'}
+                                                        </button>
                                                         <button
                                                             onClick={() => handleOpenForm(site)}
                                                             className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-600 rounded-lg transition-colors text-xs font-semibold"
@@ -354,6 +396,15 @@ const Sites: React.FC = () => {
                             <div className="overflow-y-auto flex-1 p-6 space-y-5">
                                 {/* Badges row */}
                                 <div className="flex flex-wrap gap-2">
+                                    {viewingSite.STATUS === 'inactive' ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-500">
+                                            <span className="w-2 h-2 rounded-full bg-slate-400" /> Inactive
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Active
+                                        </span>
+                                    )}
                                     <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${otCfg.color}`}>
                                         <span className={`w-2 h-2 rounded-full ${otCfg.dot}`} />
                                         {otCfg.label}
@@ -486,7 +537,7 @@ const Sites: React.FC = () => {
                                     <button onClick={() => setViewingSite(null)} className="flex-1 py-2.5 border-2 border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors text-sm">
                                         Close
                                     </button>
-                                    {role === 'admin' && (
+                                    {(role === 'admin' || role === 'system_admin') && (
                                         <button onClick={() => { setViewingSite(null); handleOpenForm(viewingSite); }}
                                             className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2">
                                             <Edit className="w-4 h-4" /> Edit Site
@@ -590,6 +641,28 @@ const Sites: React.FC = () => {
                                         </p>
                                     )}
                                 </div>
+
+                                {/* Site Status — only show when editing */}
+                                {editingSite && (
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-3">Site Status</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button type="button" onClick={() => setSiteStatus('active')}
+                                                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 font-semibold text-xs transition-all ${siteStatus === 'active' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Active
+                                            </button>
+                                            <button type="button" onClick={() => setSiteStatus('inactive')}
+                                                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 font-semibold text-xs transition-all ${siteStatus === 'inactive' ? 'border-slate-500 bg-slate-100 text-slate-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                                                <span className="w-2 h-2 rounded-full bg-slate-400" /> Inactive
+                                            </button>
+                                        </div>
+                                        {siteStatus === 'inactive' && (
+                                            <p className="mt-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg">
+                                                Inactive sites are hidden by default. All historical data is preserved.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Daily Target */}
                                 <div>
