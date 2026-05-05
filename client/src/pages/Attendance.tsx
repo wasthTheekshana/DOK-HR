@@ -413,7 +413,7 @@ const AttendancePage: React.FC = () => {
                                                                     <span className="text-sm font-medium text-slate-900">{att.STAFF_NAME || 'Unknown'}</span>
                                                                 </div>
                                                                 <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
-                                                                    {att.OT_TYPE !== 'target_based' && (
+                                                                    {(att.IN_TIME || att.OUT_TIME) && (
                                                                         <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500">
                                                                             <span className="flex items-center gap-1">
                                                                                 <Clock className="w-3 h-3 text-emerald-500" />
