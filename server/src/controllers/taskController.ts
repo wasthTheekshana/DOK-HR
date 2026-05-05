@@ -95,7 +95,11 @@ export const getTasks = async (req: Request, res: Response) => {
 };
 
 export const createTask = async (req: Request, res: Response) => {
-    const { site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
+    const { site_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
+    // Staff can only create tasks for themselves
+    const staff_id = userRole === 'staff' ? userId : req.body.staff_id;
     try {
         await execute(
             `INSERT INTO tasks (site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time)
@@ -115,9 +119,17 @@ export const createTask = async (req: Request, res: Response) => {
 
 export const updateTask = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
     const { task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date, target } = req.body;
 
     try {
+        if (userRole === 'staff') {
+            const check = await execute<any>(`SELECT staff_id FROM tasks WHERE id = :id`, { id: String(id) });
+            if (!check.rows?.[0] || Number(check.rows[0].STAFF_ID) !== Number(userId)) {
+                return res.status(403).json({ message: 'Forbidden: can only edit your own tasks' });
+            }
+        }
         await execute(
             `UPDATE tasks
            SET task_description = :task_description,
@@ -157,6 +169,8 @@ export const updateTask = async (req: Request, res: Response) => {
 export const bulkSaveTasks = async (req: Request, res: Response) => {
     const rows = req.body;
     if (!Array.isArray(rows)) return res.status(400).json({ message: 'Expected array' });
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
 
     try {
         for (const row of rows) {
@@ -167,6 +181,7 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
                 { id }
             );
             const taskRow = taskRes.rows?.[0];
+            if (userRole === 'staff' && taskRow && Number(taskRow.STAFF_ID) !== Number(userId)) continue;
             await execute(
                 `UPDATE tasks
                  SET task_description = :task_description,
