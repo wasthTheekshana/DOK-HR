@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { Task, Site, User } from '../types';
-import { Calendar, MapPin, Target, Loader2, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, Pencil, X, Check, Download, Save } from 'lucide-react';
+import { Calendar, MapPin, Target, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, X, Download, Save, ArrowLeft, MoreVertical, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
 
-const TaskTypeSelect: React.FC<{ value: string; onChange: (v: string) => void; taskTypes: any[] }> = ({ value, onChange, taskTypes }) => (
-    <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-2.5 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-        <option value="">Select Task</option>
-        {taskTypes.map((t: any) => <option key={t.TASK_NAME} value={t.TASK_NAME}>{t.TASK_NAME}</option>)}
-    </select>
-);
+type PanelState =
+  | null
+  | { mode: 'add'; staffId: number }
+  | { mode: 'edit'; task: Task };
 
 const Tasks: React.FC = () => {
     const { role, user: authUser } = useAuth();
     const isStaff = role === 'staff';
+    const isPrivileged = role === 'admin' || role === 'supervisor' || role === 'system_admin';
     const today = format(new Date(), 'yyyy-MM-dd');
     const [sites, setSites] = useState<Site[]>([]);
     const [selectedSite, setSelectedSite] = useState<string>('');
@@ -29,12 +27,16 @@ const Tasks: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(false);
-    // newDrafts: staffId → array of new unsaved task forms
-    const [newDrafts, setNewDrafts] = useState<Record<number, Array<{ _tid: string } & Partial<Task>>>>({});
-    // editDrafts: taskId → edited field values
-    const [editDrafts, setEditDrafts] = useState<Record<number, Partial<Task>>>({});
-    const [savingIds, setSavingIds] = useState<Set<string | number>>(new Set());
+    const [panelState, setPanelState] = useState<PanelState>(null);
+    const [panelError, setPanelError] = useState<string | null>(null);
+    const [panelSaving, setPanelSaving] = useState(false);
+    const [panelTaskType, setPanelTaskType] = useState('');
+    const [panelCount, setPanelCount] = useState(0);
+    const [panelDate, setPanelDate] = useState(today);
+    const [panelInTime, setPanelInTime] = useState('');
+    const [panelOutTime, setPanelOutTime] = useState('');
     const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+    const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
     useEffect(() => { fetchSites(); }, []);
 
@@ -47,6 +49,16 @@ const Tasks: React.FC = () => {
             setUsers([]); setTasks([]);
         }
     }, [selectedSite, selectedDate, viewMode, summaryDateFrom, summaryDateTo]);
+
+    useEffect(() => {
+        if (openMenuId === null) return;
+        const handler = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('[data-menu]')) setOpenMenuId(null);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openMenuId]);
 
     const fetchSites = async () => {
         try {
@@ -76,8 +88,6 @@ const Tasks: React.FC = () => {
                 setUsers(authUser ? [authUser as unknown as User] : []);
                 setTasks(tasksRes.data);
                 setSites(prev => prev.map(s => s.ID === siteBasic.ID ? siteRes.data : s));
-                setNewDrafts({});
-                setEditDrafts({});
                 return;
             }
 
@@ -90,8 +100,6 @@ const Tasks: React.FC = () => {
             setUsers(allUsers);
             setTasks(tasksRes.data);
             setSites(prev => prev.map(s => s.ID === siteBasic.ID ? siteRes.data : s));
-            setNewDrafts({});
-            setEditDrafts({});
         } catch (error) { console.error('Failed to load daily sheet', error); }
         finally { setLoading(false); }
     };
@@ -251,93 +259,6 @@ const Tasks: React.FC = () => {
         }
     };
 
-    // ── New task draft helpers ──
-    const addNewDraft = (staffId: number) => {
-        const site = getSite();
-        const siteOtType = site?.OT_TYPE || 'time_based';
-        const taskOtType = siteOtType === 'staff_outsource' ? 'time_based' : siteOtType;
-        // Pre-fill in/out from first existing task of this staff (time_based)
-        const existing = tasks.filter(t => t.STAFF_ID === staffId);
-        const firstTask = existing[0];
-        setNewDrafts(prev => ({
-            ...prev,
-            [staffId]: [...(prev[staffId] || []), {
-                _tid: `${staffId}_${Date.now()}`,
-                TASK_DESCRIPTION: '',
-                OT_TYPE: taskOtType,
-                COUNT: 0, TARGET: 0, INVOICE_PRICE: 0, PAY_UNIT_PRICE: 0,
-                IN_TIME: firstTask?.IN_TIME || '',
-                OUT_TIME: firstTask?.OUT_TIME || '',
-            }]
-        }));
-    };
-
-    const updateNewDraft = (staffId: number, _tid: string, field: string, value: any) => {
-        setNewDrafts(prev => ({
-            ...prev,
-            [staffId]: (prev[staffId] || []).map(d => d._tid === _tid ? { ...d, [field]: value } : d)
-        }));
-    };
-
-    const cancelNewDraft = (staffId: number, _tid: string) => {
-        setNewDrafts(prev => ({ ...prev, [staffId]: (prev[staffId] || []).filter(d => d._tid !== _tid) }));
-    };
-
-    const saveNewTask = async (staffId: number, _tid: string) => {
-        const site = getSite();
-        if (!site) return;
-        const draft = (newDrafts[staffId] || []).find(d => d._tid === _tid);
-        if (!draft || !draft.TASK_DESCRIPTION) { alert('Please select a task type'); return; }
-        setSavingIds(prev => new Set(prev).add(_tid));
-        try {
-            const siteOtType = site.OT_TYPE || 'time_based';
-            const taskOtType = siteOtType === 'staff_outsource' ? 'time_based' : siteOtType;
-            await api.post('/tasks', {
-                site_id: site.ID, staff_id: staffId, task_date: selectedDate,
-                task_description: draft.TASK_DESCRIPTION, ot_type: taskOtType,
-                count: Number(draft.COUNT || 0), target: Number(draft.TARGET || 0),
-                invoice_price: Number(draft.INVOICE_PRICE || 0), pay_unit_price: Number(draft.PAY_UNIT_PRICE || 0),
-                in_time: draft.IN_TIME || null, out_time: draft.OUT_TIME || null
-            });
-            cancelNewDraft(staffId, _tid);
-            await loadDailySheet();
-        } catch (err) { console.error(err); alert('Failed to save task'); }
-        finally { setSavingIds(prev => { const n = new Set(prev); n.delete(_tid); return n; }); }
-    };
-
-    // ── Edit existing task helpers ──
-    const startEditTask = (task: Task) => {
-        setEditDrafts(prev => ({ ...prev, [task.ID]: { ...task } }));
-    };
-
-    const updateEditDraft = (taskId: number, field: string, value: any) => {
-        setEditDrafts(prev => ({ ...prev, [taskId]: { ...prev[taskId], [field]: value } }));
-    };
-
-    const cancelEditTask = (taskId: number) => {
-        setEditDrafts(prev => { const n = { ...prev }; delete n[taskId]; return n; });
-    };
-
-    const saveEditTask = async (taskId: number) => {
-        const site = getSite();
-        if (!site) return;
-        const draft = editDrafts[taskId];
-        if (!draft) return;
-        setSavingIds(prev => new Set(prev).add(taskId));
-        try {
-            await api.patch(`/tasks/${taskId}`, {
-                task_description: draft.TASK_DESCRIPTION, ot_type: draft.OT_TYPE,
-                count: Number(draft.COUNT || 0), target: Number(draft.TARGET || 0),
-                invoice_price: Number(draft.INVOICE_PRICE || 0), pay_unit_price: Number(draft.PAY_UNIT_PRICE || 0),
-                in_time: draft.IN_TIME || null, out_time: draft.OUT_TIME || null,
-                task_date: selectedDate
-            });
-            cancelEditTask(taskId);
-            await loadDailySheet();
-        } catch (err) { console.error(err); alert('Failed to update task'); }
-        finally { setSavingIds(prev => { const n = new Set(prev); n.delete(taskId); return n; }); }
-    };
-
     const handleDeleteTask = async (taskId: number) => {
         if (!confirm('Delete this task?')) return;
         setDeletingIds(prev => new Set(prev).add(taskId));
@@ -346,6 +267,69 @@ const Tasks: React.FC = () => {
             await loadDailySheet();
         } catch (err) { console.error(err); alert('Failed to delete task'); }
         finally { setDeletingIds(prev => { const n = new Set(prev); n.delete(taskId); return n; }); }
+    };
+
+    const openPanel = (state: NonNullable<PanelState>) => {
+        setPanelError(null);
+        if (state.mode === 'edit') {
+            const t = state.task;
+            setPanelTaskType(t.TASK_DESCRIPTION || '');
+            setPanelCount(t.COUNT || 0);
+            setPanelDate(String(t.TASK_DATE).slice(0, 10));
+            setPanelInTime(t.IN_TIME || '');
+            setPanelOutTime(t.OUT_TIME || '');
+        } else {
+            setPanelTaskType('');
+            setPanelCount(0);
+            setPanelDate(selectedDate);
+            setPanelInTime('');
+            setPanelOutTime('');
+        }
+        setPanelState(state);
+    };
+
+    const closePanel = () => {
+        setPanelState(null);
+        setPanelError(null);
+    };
+
+    const handlePanelSave = async () => {
+        if (!panelTaskType) { setPanelError('Please select a task type'); return; }
+        const site = getSite();
+        if (!site) return;
+        setPanelSaving(true);
+        setPanelError(null);
+        try {
+            const siteOtType = site.OT_TYPE || 'time_based';
+            const taskOtType = siteOtType === 'staff_outsource' ? 'time_based' : siteOtType;
+            if (panelState?.mode === 'edit') {
+                await api.patch(`/tasks/${panelState.task.ID}`, {
+                    task_description: panelTaskType,
+                    ot_type: taskOtType,
+                    count: Number(panelCount || 0),
+                    in_time: panelInTime || null,
+                    out_time: panelOutTime || null,
+                    task_date: panelDate,
+                });
+            } else if (panelState?.mode === 'add') {
+                await api.post('/tasks', {
+                    site_id: site.ID,
+                    staff_id: panelState.staffId,
+                    task_date: panelDate,
+                    task_description: panelTaskType,
+                    ot_type: taskOtType,
+                    count: Number(panelCount || 0),
+                    in_time: panelInTime || null,
+                    out_time: panelOutTime || null,
+                });
+            }
+            closePanel();
+            await loadDailySheet();
+        } catch (err: any) {
+            setPanelError(err.response?.data?.message || 'Failed to save task');
+        } finally {
+            setPanelSaving(false);
+        }
     };
 
     const currentSite = sites.find(s => s.SITE_NO === selectedSite);
@@ -364,14 +348,18 @@ const Tasks: React.FC = () => {
     }
 
     return (
-        <div className="space-y-5">
-            {/* Header */}
-            <div className="card p-5">
-                <div className="flex flex-col gap-4">
+        <div className="relative">
+            {/* Main content — shifts left on desktop when panel is open */}
+            <div className={`space-y-4 transition-all duration-300 ${panelState ? 'md:mr-[45%]' : ''}`}>
+
+                {/* Header card */}
+                <div className="card p-5 space-y-4">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h1 className="text-[17px] font-bold text-slate-900 tracking-tight">Daily Task Sheet</h1>
-                            <p className="text-sm text-slate-500 mt-0.5">{isStaff ? 'Add your tasks for today' : 'Manage tasks for all employees'}</p>
+                            <h1 className="text-[17px] font-bold text-slate-900 tracking-tight">Daily Tasks</h1>
+                            <p className="text-sm text-slate-500 mt-0.5">
+                                {isStaff ? 'Add your tasks for today' : 'Manage tasks for all employees'}
+                            </p>
                         </div>
                         {role === 'admin' && (
                             <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
@@ -388,51 +376,42 @@ const Tasks: React.FC = () => {
                     </div>
 
                     {viewMode === 'daily' ? (
-                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="space-y-3">
                             {!isStaff && (
-                                <div className="flex-1">
+                                <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
                                     <div className="relative">
                                         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                        <select
-                                            value={selectedSite}
-                                            onChange={(e) => setSelectedSite(e.target.value)}
-                                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                                        >
+                                        <select value={selectedSite} onChange={e => setSelectedSite(e.target.value)}
+                                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
                                             {role === 'admin' && <option value="ALL">All Sites</option>}
                                             {sites.map(s => <option key={s.ID} value={s.SITE_NO}>{s.NAME}</option>)}
                                         </select>
                                     </div>
                                 </div>
                             )}
-                            <div className="sm:w-48">
+                            <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Date</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        type="date"
-                                        value={selectedDate}
-                                        onChange={isStaff ? undefined : (e) => setSelectedDate(e.target.value)}
+                                    <input type="date" value={selectedDate}
+                                        onChange={isStaff || role === 'supervisor' ? undefined : e => setSelectedDate(e.target.value)}
                                         min={isStaff || role === 'supervisor' ? today : undefined}
                                         max={isStaff || role === 'supervisor' ? today : undefined}
                                         readOnly={isStaff || role === 'supervisor'}
-                                        className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                                    />
+                                        className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
                                 </div>
                             </div>
-                            {/* Download button — admin only, daily mode */}
                             {role === 'admin' && (
-                                <div className="flex items-end">
-                                    <button onClick={downloadDailyReport}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
-                                        <Download className="w-4 h-4" /> Download
-                                    </button>
-                                </div>
+                                <button onClick={downloadDailyReport}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors">
+                                    <Download className="w-4 h-4" /> Download
+                                </button>
                             )}
                         </div>
                     ) : (
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <div className="flex-1">
+                        <div className="space-y-3">
+                            <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">From Date</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -440,7 +419,7 @@ const Tasks: React.FC = () => {
                                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
                                 </div>
                             </div>
-                            <div className="flex-1">
+                            <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">To Date</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -448,63 +427,72 @@ const Tasks: React.FC = () => {
                                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" />
                                 </div>
                             </div>
-                            <div className="flex items-end">
-                                <button onClick={downloadSummaryReport}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap">
-                                    <Download className="w-4 h-4" /> Download
-                                </button>
-                            </div>
+                            <button onClick={downloadSummaryReport}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors">
+                                <Download className="w-4 h-4" /> Download Summary
+                            </button>
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* Stats Bar — daily mode only */}
+            {/* Stats bar — daily mode, site selected */}
             {viewMode === 'daily' && !loading && currentSite && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center">
-                            <Users className="w-4 h-4 text-indigo-600" />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 font-medium">Total Staff</p>
-                            <p className="text-lg font-bold text-slate-900">{totalUsers}</p>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
-                            <TrendingUp className="w-4 h-4 text-emerald-600" />
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 font-medium">Recorded</p>
-                            <p className="text-lg font-bold text-slate-900">{recordedCount}</p>
-                        </div>
-                    </div>
-                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${currentSite.OT_TYPE === 'time_based' ? 'bg-blue-50' : 'bg-violet-50'}`}>
-                            {currentSite.OT_TYPE === 'time_based'
-                                ? <Clock className="w-4 h-4 text-blue-600" />
-                                : <Target className="w-4 h-4 text-violet-600" />
-                            }
-                        </div>
-                        <div>
-                            <p className="text-xs text-slate-500 font-medium">OT Type</p>
-                            <p className="text-sm font-bold text-slate-900">{currentSite.OT_TYPE === 'time_based' ? 'Time' : 'Target'}</p>
-                        </div>
-                    </div>
+                <div className="space-y-3">
+                    {([
+                        {
+                            icon: Users,
+                            label: 'Total Staff',
+                            value: String(totalUsers),
+                            sub: 'Active employees',
+                            bg: 'bg-indigo-50',
+                            color: 'text-indigo-600',
+                        },
+                        {
+                            icon: TrendingUp,
+                            label: 'Recorded',
+                            value: String(recordedCount),
+                            sub: 'Tasks recorded',
+                            bg: 'bg-emerald-50',
+                            color: 'text-emerald-600',
+                        },
+                        {
+                            icon: currentSite.OT_TYPE === 'time_based' ? Clock : Target,
+                            label: 'OT Type',
+                            value: currentSite.OT_TYPE === 'time_based' ? 'Time' : currentSite.OT_TYPE === 'target_based' ? 'Target' : 'Outsource',
+                            sub: 'Overtime tracking',
+                            bg: currentSite.OT_TYPE === 'time_based' ? 'bg-blue-50' : 'bg-violet-50',
+                            color: currentSite.OT_TYPE === 'time_based' ? 'text-blue-600' : 'text-violet-600',
+                        },
+                    ] as const).map((stat) => {
+                        const Icon = stat.icon;
+                        return (
+                            <div key={stat.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex items-center gap-4">
+                                <div className={`w-11 h-11 ${stat.bg} rounded-xl flex items-center justify-center shrink-0`}>
+                                    <Icon className={`w-5 h-5 ${stat.color}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{stat.label}</p>
+                                    <p className="text-2xl font-black text-slate-900 leading-tight">{stat.value}</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">{stat.sub}</p>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
-            {/* Main Content */}
+            {/* Main content card */}
             <div className="card overflow-hidden">
                 {loading ? (
-                    <div className="p-6 space-y-3">
+                    <div className="p-5 space-y-3">
                         {[...Array(5)].map((_, i) => (
-                            <div key={i} className="skeleton h-14 rounded-xl" />
+                            <div key={i} className="skeleton h-16 rounded-2xl" />
                         ))}
                     </div>
+
                 ) : viewMode === 'summary' ? (
-                    /* Summary view — admin only */
+                    /* ── Summary view — kept exactly as before ── */
                     <div className="divide-y divide-slate-100">
                         {summaryData.length === 0 ? (
                             <div className="py-16 text-center">
@@ -514,19 +502,19 @@ const Tasks: React.FC = () => {
                         ) : (
                             <>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5">
-                                    <div className="bg-indigo-50 rounded-xl p-3 text-center">
+                                    <div className="bg-indigo-50 rounded-2xl p-3 text-center shadow-sm">
                                         <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Sites</p>
                                         <p className="text-2xl font-bold text-indigo-900 mt-1">{summaryData.length}</p>
                                     </div>
-                                    <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                                    <div className="bg-emerald-50 rounded-2xl p-3 text-center shadow-sm">
                                         <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Staff</p>
                                         <p className="text-2xl font-bold text-emerald-900 mt-1">{summaryData.reduce((s: number, d: any) => s + d.total_staff, 0)}</p>
                                     </div>
-                                    <div className="bg-blue-50 rounded-xl p-3 text-center">
+                                    <div className="bg-blue-50 rounded-2xl p-3 text-center shadow-sm">
                                         <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Hours</p>
                                         <p className="text-2xl font-bold text-blue-900 mt-1">{summaryData.reduce((s: number, d: any) => s + (d.total_hours || 0), 0).toFixed(1)}</p>
                                     </div>
-                                    <div className="bg-orange-50 rounded-xl p-3 text-center">
+                                    <div className="bg-orange-50 rounded-2xl p-3 text-center shadow-sm">
                                         <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Count</p>
                                         <p className="text-2xl font-bold text-orange-900 mt-1">{summaryData.reduce((s: number, d: any) => s + (d.total_count || 0), 0)}</p>
                                     </div>
@@ -540,7 +528,7 @@ const Tasks: React.FC = () => {
                                     });
                                     return (
                                         <div key={site.site_no} className="border-t border-slate-100">
-                                            <button onClick={toggle} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                            <button onClick={toggle} className="w-full px-5 py-4 flex items-center justify-between hover:bg-indigo-50/40 transition-colors">
                                                 <div className="flex items-center gap-3">
                                                     <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                                                     <div className="text-left">
@@ -601,8 +589,9 @@ const Tasks: React.FC = () => {
                             </>
                         )}
                     </div>
+
                 ) : selectedSite === 'ALL' ? (
-                    /* All Sites — download only panel */
+                    /* All-sites download panel */
                     <div className="py-16 text-center space-y-4">
                         <Download className="w-12 h-12 text-slate-200 mx-auto" />
                         <div>
@@ -614,200 +603,283 @@ const Tasks: React.FC = () => {
                             <Download className="w-4 h-4" /> Download All Sites Report
                         </button>
                     </div>
-                ) : (
-                    /* Daily Sheet — grouped by staff, multiple tasks per person */
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                            <thead className="bg-slate-50 border-b border-slate-100">
-                                <tr>
-                                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-48">Task Type</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Count</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">In Time</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Out Time</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            {users.length === 0 ? (
-                                <tbody>
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-16 text-center">
-                                            <UserIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-                                            <p className="text-slate-500 font-medium">No employees found for this site</p>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            ) : users.map(user => {
-                                const site = getSite();
-                                const siteTaskTypes = site?.TASK_TYPES || [];
-                                const siteOtType = site?.OT_TYPE || 'time_based';
-                                const isTimeBased  = siteOtType === 'time_based' || siteOtType === 'staff_outsource';
-                                const showTimeCols = isTimeBased || siteOtType === 'target_based';
-                                const userTasks = tasks.filter(t => t.STAFF_ID === user.ID);
-                                const userNewDrafts = newDrafts[user.ID] || [];
 
-                                return (
-                                    <tbody key={user.ID} className="border-t-2 border-slate-200">
-                                        {/* Staff header row */}
-                                        <tr className="bg-slate-50">
-                                            <td colSpan={4} className="px-5 py-2.5">
-                                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                                                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
-                                                        {user.NAME.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-sm font-bold text-slate-900">{user.NAME}</span>
-                                                        <span className="text-xs text-slate-400 ml-2">{user.EPF_NUMBER}</span>
-                                                    </div>
-                                                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${isTimeBased ? 'bg-emerald-50 text-emerald-700' : 'bg-violet-50 text-violet-700'}`}>
+                ) : (
+                    /* ── Daily employee card list ── */
+                    <>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <p className="text-sm font-bold text-slate-700">Employee Tasks</p>
+                            {isPrivileged && users.length > 0 && (
+                                <button onClick={() => openPanel({ mode: 'add', staffId: users[0].ID })}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors">
+                                    <Plus className="w-3.5 h-3.5" /> Add Task
+                                </button>
+                            )}
+                        </div>
+
+                        {users.length === 0 ? (
+                            <div className="py-16 text-center">
+                                <UserIcon className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                                <p className="text-slate-500 font-medium">No employees found for this site</p>
+                            </div>
+                        ) : (
+                            <div>
+                                {users.map((user) => {
+                                    const site = getSite();
+                                    const siteOtType = site?.OT_TYPE || 'time_based';
+                                    const isTimeBased = siteOtType === 'time_based' || siteOtType === 'staff_outsource';
+                                    const userTasks = tasks.filter(t => t.STAFF_ID === user.ID);
+                                    const avatarColors = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-violet-100 text-violet-700', 'bg-orange-100 text-orange-700', 'bg-blue-100 text-blue-700'];
+                                    const avatarColor = avatarColors[user.ID % avatarColors.length];
+                                    const canAdd = isPrivileged || (isStaff && user.ID === authUser?.ID);
+
+                                    return (
+                                        <div key={user.ID} className="flex items-center gap-3 px-5 py-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                                            {/* Avatar */}
+                                            <div className={`w-11 h-11 rounded-full ${avatarColor} flex items-center justify-center font-black text-sm shrink-0`}>
+                                                {user.NAME.charAt(0).toUpperCase()}
+                                            </div>
+
+                                            {/* Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className="text-sm font-bold text-slate-900 truncate">{user.NAME}</p>
+                                                    {user.IS_TEMP === 1 && (
+                                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Guest</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                    <p className="text-xs text-slate-400">ID: {user.EPF_NUMBER}</p>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isTimeBased ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>
                                                         {isTimeBased ? 'Time' : 'Target'}
                                                     </span>
-                                                    {user.IS_TEMP === 1 && (
-                                                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">
-                                                            Guest
-                                                        </span>
-                                                    )}
                                                     {userTasks.length > 0 && (
-                                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
-                                                            {userTasks.length} task{userTasks.length > 1 ? 's' : ''}
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600">
+                                                            {userTasks.length} task{userTasks.length !== 1 ? 's' : ''}
                                                         </span>
                                                     )}
                                                 </div>
-                                            </td>
-                                            <td className="px-4 py-2.5 text-right">
-                                                <button onClick={() => addNewDraft(user.ID)}
-                                                    className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-all active:scale-95 ml-auto">
+                                            </div>
+
+                                            {/* Add Task button */}
+                                            {canAdd && (
+                                                <button onClick={() => openPanel({ mode: 'add', staffId: user.ID })}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-indigo-200 text-indigo-600 text-xs font-bold rounded-xl hover:bg-indigo-50 transition-colors shrink-0">
                                                     <Plus className="w-3.5 h-3.5" /> Add Task
                                                 </button>
-                                            </td>
-                                        </tr>
+                                            )}
 
-                                        {/* Existing task rows */}
-                                        {userTasks.map(task => {
-                                            const isEditing = !!editDrafts[task.ID];
-                                            const ed = editDrafts[task.ID] || {};
-                                            const isSaving = savingIds.has(task.ID);
-                                            const isDeleting = deletingIds.has(task.ID);
-                                            return (
-                                                <tr key={task.ID} className={`border-t border-slate-100 transition-colors ${isEditing ? 'bg-amber-50/40' : 'hover:bg-slate-50/40'}`}>
-                                                    <td className="px-5 py-3">
-                                                        {isEditing
-                                                            ? <TaskTypeSelect value={ed.TASK_DESCRIPTION || ''} onChange={v => updateEditDraft(task.ID, 'TASK_DESCRIPTION', v)} taskTypes={siteTaskTypes} />
-                                                            : <span className="text-sm font-medium text-slate-800">{task.TASK_DESCRIPTION || '—'}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEditing
-                                                            ? <input type="number" value={ed.COUNT ?? task.COUNT ?? 0} onChange={e => updateEditDraft(task.ID, 'COUNT', e.target.value)}
-                                                                className="w-20 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center" />
-                                                            : <span className="text-sm font-mono text-slate-700">{task.COUNT ?? 0}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {showTimeCols
-                                                            ? isEditing
-                                                                ? <input type="time" value={ed.IN_TIME || ''} onChange={e => updateEditDraft(task.ID, 'IN_TIME', e.target.value)}
-                                                                    className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                                                : <span className="text-sm font-mono text-emerald-700">{task.IN_TIME || '—'}</span>
-                                                            : <span className="text-slate-300 text-sm">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {showTimeCols
-                                                            ? isEditing
-                                                                ? <input type="time" value={ed.OUT_TIME || ''} onChange={e => updateEditDraft(task.ID, 'OUT_TIME', e.target.value)}
-                                                                    className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                                                : <span className="text-sm font-mono text-orange-700">{task.OUT_TIME || '—'}</span>
-                                                            : <span className="text-slate-300 text-sm">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        {isEditing ? (
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <button onClick={() => saveEditTask(task.ID)} disabled={isSaving}
-                                                                    className="p-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-60">
-                                                                    {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                                                </button>
-                                                                <button onClick={() => cancelEditTask(task.ID)}
-                                                                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                                                                    <X className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            </div>
-                                                        ) : isStaff ? (
-                                                            <span className="text-xs text-slate-300 pr-1">saved</span>
+                                            {/* Three-dot menu */}
+                                            <div className="relative shrink-0" data-menu>
+                                                <button onClick={() => setOpenMenuId(openMenuId === user.ID ? null : user.ID)}
+                                                    className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 transition-colors">
+                                                    <MoreVertical className="w-4 h-4 text-slate-400" />
+                                                </button>
+                                                {openMenuId === user.ID && (
+                                                    <div className="absolute right-0 top-9 w-64 bg-white rounded-2xl border border-slate-100 shadow-xl z-20 overflow-hidden">
+                                                        {userTasks.length === 0 ? (
+                                                            <p className="px-4 py-4 text-sm text-slate-400 text-center">No tasks recorded</p>
                                                         ) : (
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <button onClick={() => startEditTask(task)}
-                                                                    className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                                                                    <Pencil className="w-3.5 h-3.5" />
-                                                                </button>
-                                                                <button onClick={() => handleDeleteTask(task.ID)} disabled={isDeleting}
-                                                                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50">
-                                                                    {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                                                </button>
-                                                            </div>
+                                                            <>
+                                                                <p className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-50">
+                                                                    Tasks ({userTasks.length})
+                                                                </p>
+                                                                {userTasks.map(task => (
+                                                                    <div key={task.ID} className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
+                                                                        <div className="flex-1 min-w-0"
+                                                                            onClick={() => {
+                                                                                if (isPrivileged) {
+                                                                                    openPanel({ mode: 'edit', task });
+                                                                                    setOpenMenuId(null);
+                                                                                }
+                                                                            }}>
+                                                                            <p className={`text-sm font-semibold text-slate-800 truncate ${isPrivileged ? 'cursor-pointer hover:text-indigo-600' : ''}`}>
+                                                                                {task.TASK_DESCRIPTION}
+                                                                            </p>
+                                                                            <p className="text-xs text-slate-400">
+                                                                                Count: {task.COUNT}{task.IN_TIME ? ` · ${task.IN_TIME}–${task.OUT_TIME}` : ''}
+                                                                            </p>
+                                                                        </div>
+                                                                        {isPrivileged && (
+                                                                            <button
+                                                                                onClick={() => { handleDeleteTask(task.ID); setOpenMenuId(null); }}
+                                                                                disabled={deletingIds.has(task.ID)}
+                                                                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0 disabled:opacity-40">
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </>
                                                         )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-
-                                        {/* New task draft rows */}
-                                        {userNewDrafts.map(draft => {
-                                            const isSaving = savingIds.has(draft._tid);
-                                            return (
-                                                <tr key={draft._tid} className="border-t border-dashed border-indigo-200 bg-indigo-50/30">
-                                                    <td className="px-5 py-3">
-                                                        <TaskTypeSelect value={draft.TASK_DESCRIPTION || ''}
-                                                            onChange={v => {
-                                                                const typeConfig = siteTaskTypes.find((t: any) => t.TASK_NAME === v);
-                                                                updateNewDraft(user.ID, draft._tid, 'TASK_DESCRIPTION', v);
-                                                                if (typeConfig) updateNewDraft(user.ID, draft._tid, 'INVOICE_PRICE', typeConfig.INVOICE_PRICE);
-                                                            }} taskTypes={siteTaskTypes} />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <input type="number" value={draft.COUNT ?? 0} onChange={e => updateNewDraft(user.ID, draft._tid, 'COUNT', e.target.value)}
-                                                            className="w-20 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center" placeholder="0" />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {showTimeCols
-                                                            ? <input type="time" value={draft.IN_TIME || ''} onChange={e => updateNewDraft(user.ID, draft._tid, 'IN_TIME', e.target.value)}
-                                                                className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                                            : <span className="text-slate-300 text-sm">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {showTimeCols
-                                                            ? <input type="time" value={draft.OUT_TIME || ''} onChange={e => updateNewDraft(user.ID, draft._tid, 'OUT_TIME', e.target.value)}
-                                                                className="w-32 px-2 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                                            : <span className="text-slate-300 text-sm">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <div className="flex items-center justify-end gap-1">
-                                                            <button onClick={() => saveNewTask(user.ID, draft._tid)} disabled={isSaving}
-                                                                className="p-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-60">
-                                                                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                                            </button>
-                                                            <button onClick={() => cancelNewDraft(user.ID, draft._tid)}
-                                                                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                                                                <X className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-
-                                        {/* Empty state for this staff */}
-                                        {userTasks.length === 0 && userNewDrafts.length === 0 && (
-                                            <tr className="border-t border-slate-100">
-                                                <td colSpan={5} className="px-5 py-3 text-xs text-slate-400 italic">
-                                                    No tasks recorded — click Add Task
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                );
-                            })}
-                        </table>
-                    </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
+
+        </div> {/* end main content wrapper with mr-[45%] */}
+
+        {/* Mobile backdrop */}
+        {panelState && (
+            <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={closePanel} />
+        )}
+
+        {/* Slide panel */}
+        <div className={`fixed inset-y-0 right-0 z-40 w-full md:w-[45%] bg-white flex flex-col shadow-2xl border-l border-slate-100 transform transition-transform duration-300 ease-in-out ${panelState ? 'translate-x-0' : 'translate-x-full'}`}>
+            {panelState && (() => {
+                const staffId = panelState.mode === 'add' ? panelState.staffId : panelState.task.STAFF_ID;
+                const staff = users.find(u => u.ID === staffId);
+                const site = getSite();
+                const siteOtType = site?.OT_TYPE || 'time_based';
+                const showTimeCols = siteOtType === 'time_based' || siteOtType === 'staff_outsource';
+                const isEdit = panelState.mode === 'edit';
+
+                return (
+                    <>
+                        {/* Panel header */}
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 shrink-0">
+                            <button onClick={closePanel}
+                                className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 transition-colors">
+                                <ArrowLeft className="w-5 h-5 text-slate-600" />
+                            </button>
+                            <div>
+                                <h2 className="text-base font-black text-slate-900">{isEdit ? 'Edit Task' : 'Add Task'}</h2>
+                                {staff && <p className="text-xs text-slate-400">{staff.NAME} (ID: {staff.EPF_NUMBER})</p>}
+                            </div>
+                        </div>
+
+                        {/* Scrollable body */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {/* Employee context card */}
+                            {staff && (
+                                <div className="flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-3">
+                                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-sm shrink-0">
+                                        {staff.NAME.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">{staff.NAME}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-xs text-slate-400">ID: {staff.EPF_NUMBER}</p>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${showTimeCols ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>
+                                                {siteOtType === 'time_based' ? 'Time' : siteOtType === 'target_based' ? 'Target' : 'Outsource'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Header accent card */}
+                            <div className="flex items-center gap-3 bg-indigo-50 rounded-2xl px-4 py-3">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                                    <BarChart3 className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-indigo-900">{isEdit ? 'Edit Task' : 'Add Task'}</p>
+                                    <p className="text-xs text-indigo-500">{isEdit ? 'Update task details below' : 'Add a new task for this employee'}</p>
+                                </div>
+                            </div>
+
+                            {/* Form */}
+                            <div className="space-y-4">
+                                {/* Task Type */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                                        Task Type <span className="text-red-500">*</span>
+                                    </label>
+                                    <select value={panelTaskType} onChange={e => setPanelTaskType(e.target.value)}
+                                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-indigo-500 transition-colors">
+                                        <option value="">Select Task</option>
+                                        {site?.TASK_TYPES?.map(tt => (
+                                            <option key={tt.TASK_NAME} value={tt.TASK_NAME}>{tt.TASK_NAME}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Count */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                                        Count <span className="text-red-500">*</span>
+                                    </label>
+                                    <input type="number" min="0" value={panelCount}
+                                        onChange={e => setPanelCount(Number(e.target.value))}
+                                        onKeyDown={e => { if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault(); }}
+                                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                                </div>
+
+                                {/* Task Date */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                                        Task Date <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                        <input type="date" value={panelDate}
+                                            readOnly={isStaff || role === 'supervisor'}
+                                            onChange={isStaff || role === 'supervisor' ? undefined : e => setPanelDate(e.target.value)}
+                                            className="w-full pl-11 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                                    </div>
+                                </div>
+
+                                {/* In / Out Time */}
+                                {showTimeCols && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">In Time</label>
+                                            <div className="relative">
+                                                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                <input type="time" value={panelInTime} onChange={e => setPanelInTime(e.target.value)}
+                                                    className="w-full pl-10 pr-3 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Out Time</label>
+                                            <div className="relative">
+                                                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                                <input type="time" value={panelOutTime} onChange={e => setPanelOutTime(e.target.value)}
+                                                    className="w-full pl-10 pr-3 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Error */}
+                            {panelError && (
+                                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+                                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                                    <p className="text-sm text-red-600">{panelError}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-5 space-y-3 border-t border-slate-100 shrink-0">
+                            <button onClick={handlePanelSave} disabled={panelSaving}
+                                className="w-full flex items-center justify-center gap-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-2xl transition-colors text-sm">
+                                {panelSaving ? (
+                                    <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving...</>
+                                ) : (
+                                    <><Save className="w-4 h-4" /> {isEdit ? 'Update Task' : 'Save Task'}</>
+                                )}
+                            </button>
+                            <button onClick={closePanel}
+                                className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-colors text-sm">
+                                <X className="w-4 h-4" /> Cancel
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
         </div>
+
+    </div> {/* end relative outer wrapper */}
     );
 };
 
