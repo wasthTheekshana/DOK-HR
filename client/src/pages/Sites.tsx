@@ -422,7 +422,7 @@ const Sites: React.FC = () => {
                                 </div>
 
                                 {/* Key stats */}
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div className="bg-slate-50 rounded-xl p-4 text-center">
                                         <div className="flex items-center justify-center gap-1 text-slate-400 mb-1">
                                             <UsersIcon className="w-3.5 h-3.5" />
@@ -621,7 +621,7 @@ const Sites: React.FC = () => {
                                 {/* OT Type */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-3">OT Calculation Type <span className="text-red-500">*</span></label>
-                                    <div className="grid grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <button type="button" onClick={() => setOtType('time_based')}
                                             className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 font-semibold text-xs transition-all ${otType === 'time_based' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                                             <Clock className="w-4 h-4" /> Time Based

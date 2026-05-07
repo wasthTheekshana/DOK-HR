@@ -461,7 +461,7 @@ const Tasks: React.FC = () => {
 
             {/* Stats Bar — daily mode only */}
             {viewMode === 'daily' && !loading && currentSite && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-center gap-3">
                         <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center">
                             <Users className="w-4 h-4 text-indigo-600" />
