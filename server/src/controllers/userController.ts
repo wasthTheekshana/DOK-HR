@@ -33,7 +33,7 @@ export const getUsers = async (req: Request, res: Response) => {
         }
 
         if (site) {
-            query += ` AND site_id = :site`;
+            query += ` AND (site_id = :site OR id = (SELECT supervisor_id FROM sites WHERE id = :site AND supervisor_id IS NOT NULL))`;
             params.site = site;
         }
         if (role) {
