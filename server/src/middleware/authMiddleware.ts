@@ -16,7 +16,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
         req.user = user;
         next();
     } catch (err) {
-        return res.sendStatus(403);
+        return res.sendStatus(401);
     }
 };
 
