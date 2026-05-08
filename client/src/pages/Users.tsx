@@ -609,83 +609,107 @@ const Users: React.FC = () => {
                     const site = sites.find(s => s.ID === ta.SITE_ID);
                     if (site) siteCards.push({ site, tag: 'Temp' });
                 });
+                const headerGradient = viewingUser.ROLE === 'admin' || viewingUser.ROLE === 'system_admin'
+                    ? 'from-red-50 via-red-50/60 to-white'
+                    : viewingUser.ROLE === 'supervisor'
+                        ? 'from-violet-50 via-violet-50/60 to-white'
+                        : 'from-blue-50 via-blue-50/60 to-white';
+                const isAdminViewer = ['admin', 'system_admin'].includes(currentUserRole ?? '');
                 return (
                     <>
                         {/* Backdrop */}
-                        <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setViewingUser(null)} />
+                        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" onClick={() => setViewingUser(null)} />
                         {/* Panel */}
-                        <div className="fixed inset-y-0 right-0 z-50 w-[420px] bg-white shadow-2xl flex flex-col overflow-hidden">
-                            {/* Header */}
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 ${cfg.bg} rounded-full flex items-center justify-center shrink-0`}>
-                                        <Icon className={`w-5 h-5 ${cfg.text}`} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-base font-bold text-slate-900 leading-tight">{viewingUser.NAME}</h2>
-                                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold capitalize ${cfg.bg} ${cfg.text}`}>{viewingUser.ROLE}</span>
-                                    </div>
-                                </div>
-                                <button onClick={() => setViewingUser(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors" title="Close">
+                        <div className="fixed inset-y-0 right-0 z-50 w-[440px] bg-white shadow-2xl flex flex-col overflow-hidden border-l border-slate-200">
+                            {/* Hero Header */}
+                            <div className={`bg-gradient-to-b ${headerGradient} px-6 pt-5 pb-7 shrink-0 relative`}>
+                                <button onClick={() => setViewingUser(null)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/70 transition-colors" title="Close">
                                     <X className="w-4 h-4 text-slate-500" />
                                 </button>
+                                <div className="flex flex-col items-center text-center mt-1">
+                                    <div className={`w-16 h-16 ${cfg.bg} rounded-2xl flex items-center justify-center shadow-sm mb-3 ring-4 ring-white`}>
+                                        <Icon className={`w-8 h-8 ${cfg.text}`} />
+                                    </div>
+                                    <h2 className="text-lg font-bold text-slate-900 leading-tight">{viewingUser.NAME}</h2>
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap justify-center">
+                                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold capitalize ${cfg.bg} ${cfg.text}`}>
+                                            {viewingUser.ROLE.replace('_', ' ')}
+                                        </span>
+                                        {viewingUser.INACTIVATION_REQUESTED
+                                            ? <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold"><AlertTriangle className="w-3 h-3" />Flagged</span>
+                                            : viewingUser.STATUS === 'active'
+                                                ? <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold"><CheckCircle className="w-3 h-3" />Active</span>
+                                                : <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[11px] font-bold"><XCircle className="w-3 h-3" />Inactive</span>
+                                        }
+                                    </div>
+                                </div>
                             </div>
                             {/* Scrollable body */}
-                            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-                                {/* Profile */}
-                                <div className="space-y-1">
-                                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Profile</h3>
-                                    {[
-                                        { label: 'EPF Number', value: <span className="font-mono">{viewingUser.EPF_NUMBER}</span> },
-                                        { label: 'Status', value: viewingUser.INACTIVATION_REQUESTED
-                                            ? <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600"><AlertTriangle className="w-3 h-3" /> Flagged</span>
-                                            : viewingUser.STATUS === 'active'
-                                                ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><CheckCircle className="w-3 h-3" /> Active</span>
-                                                : <span className="flex items-center gap-1 text-[11px] font-bold text-red-500"><XCircle className="w-3 h-3" /> Inactive</span>
-                                        },
-                                        ...(['admin', 'system_admin'].includes(currentUserRole ?? '') ? [
-                                            { label: 'Basic Salary', value: <span className="font-medium">{viewingUser.BASIC_SALARY ? `Rs. ${Number(viewingUser.BASIC_SALARY).toLocaleString()}` : '—'}</span> },
-                                            { label: 'OT Percentage', value: <span>{viewingUser.OT_PERCENTAGE ? `${viewingUser.OT_PERCENTAGE}%` : '—'}</span> },
-                                            { label: 'Fix Salary', value: <span className="font-medium">{viewingUser.FIX_SALARY ? `Rs. ${Number(viewingUser.FIX_SALARY).toLocaleString()}` : '—'}</span> },
-                                        ] : []),
-                                    ].map(({ label, value }) => (
-                                        <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-50">
-                                            <span className="text-sm text-slate-500">{label}</span>
-                                            <span className="text-sm text-slate-900">{value}</span>
-                                        </div>
-                                    ))}
+                            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                                {/* EPF */}
+                                <div className="px-6 py-4">
+                                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">EPF Number</p>
+                                    <p className="text-sm font-mono font-semibold text-slate-800">{viewingUser.EPF_NUMBER ?? '—'}</p>
                                 </div>
+                                {/* Compensation — admin/system_admin viewers only */}
+                                {isAdminViewer && (
+                                    <div className="px-6 py-4">
+                                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Compensation</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { label: 'Basic Salary', value: viewingUser.BASIC_SALARY ? `Rs. ${Number(viewingUser.BASIC_SALARY).toLocaleString()}` : '—' },
+                                                { label: 'OT %', value: viewingUser.OT_PERCENTAGE ? `${viewingUser.OT_PERCENTAGE}%` : '—' },
+                                                { label: 'Fix Salary', value: viewingUser.FIX_SALARY ? `Rs. ${Number(viewingUser.FIX_SALARY).toLocaleString()}` : '—' },
+                                            ].map(({ label, value }) => (
+                                                <div key={label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                                    <p className="text-[10px] text-slate-400 font-medium mb-1 leading-tight">{label}</p>
+                                                    <p className="text-sm font-bold text-slate-800 truncate">{value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 {/* Assigned Sites */}
-                                <div className="space-y-3">
-                                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Sites</h3>
+                                <div className="px-6 py-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Assigned Sites</p>
+                                        {siteCards.length > 0 && (
+                                            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{siteCards.length}</span>
+                                        )}
+                                    </div>
                                     {panelTempLoading ? (
-                                        <div className="flex items-center gap-2 py-4">
-                                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                            <span className="text-sm text-slate-400">Loading...</span>
+                                        <div className="flex items-center justify-center gap-2 py-8">
+                                            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                            <span className="text-sm text-slate-400">Loading sites…</span>
                                         </div>
                                     ) : siteCards.length === 0 ? (
-                                        <div className="py-8 text-center">
-                                            <MapPin className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                                            <p className="text-sm text-slate-400 font-medium">No site assigned</p>
+                                        <div className="py-10 text-center">
+                                            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                                <MapPin className="w-6 h-6 text-slate-300" />
+                                            </div>
+                                            <p className="text-sm font-semibold text-slate-400">No site assigned</p>
+                                            <p className="text-xs text-slate-300 mt-0.5">This member has no active site assignments</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
-                                            {siteCards.map(({ site, tag }, i) => (
-                                                <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-slate-900">{site.NAME}</p>
-                                                            <p className="text-xs font-mono text-slate-400">{site.SITE_NO}</p>
+                                            {siteCards.map(({ site, tag }, i) => {
+                                                const accent = tag === 'Home' ? 'border-l-slate-400' : tag === 'Manages' ? 'border-l-violet-500' : 'border-l-amber-400';
+                                                const pill = tag === 'Home' ? 'bg-slate-100 text-slate-600' : tag === 'Manages' ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700';
+                                                return (
+                                                    <div key={i} className={`flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 border-l-4 ${accent} shadow-sm`}>
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                                                                <MapPin className="w-4 h-4 text-slate-500" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-semibold text-slate-900 truncate">{site.NAME}</p>
+                                                                <p className="text-xs font-mono text-slate-400">{site.SITE_NO}</p>
+                                                            </div>
                                                         </div>
+                                                        <span className={`ml-2 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${pill}`}>{tag}</span>
                                                     </div>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                        tag === 'Home' ? 'bg-slate-100 text-slate-600' :
-                                                        tag === 'Manages' ? 'bg-indigo-100 text-indigo-700' :
-                                                        'bg-amber-100 text-amber-700'
-                                                    }`}>{tag}</span>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
