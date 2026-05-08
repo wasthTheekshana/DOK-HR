@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -17,8 +17,10 @@ const Login: React.FC = () => {
     const [showPwd, setShowPwd]       = useState(false);
     const [error, setError]           = useState('');
     const [loading, setLoading]       = useState(false);
-    const { login } = useAuth();
+    const { login, isAuthenticated } = useAuth();
     const navigate = useNavigate();
+
+    if (isAuthenticated) return <Navigate to="/" replace />;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

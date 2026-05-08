@@ -57,7 +57,7 @@ const Users: React.FC = () => {
     const fetchUsers = async () => {
         try {
             let url = roleFilter ? `/users?role=${roleFilter}` : '/users';
-            if (searchQuery) url += (url.includes('?') ? '&' : '?') + `search=${searchQuery}`;
+            if (searchQuery) url += (url.includes('?') ? '&' : '?') + `search=${encodeURIComponent(searchQuery)}`;
             const r = await api.get(url); setUsers(r.data);
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
@@ -141,6 +141,7 @@ const Users: React.FC = () => {
 
     const handleFlagInactivation = async () => {
         if (!editingUser) return;
+        if (!['admin', 'system_admin'].includes(currentUserRole || '')) return;
         if (!confirm('Flag this user for inactivation? An admin will review this.')) return;
         try {
             await api.patch(`/users/${editingUser.ID}`, { inactivation_requested: 1 });
@@ -290,9 +291,11 @@ const Users: React.FC = () => {
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => handleOpenModal(user)} className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors" title="Edit">
-                                                    <Edit className="w-3.5 h-3.5" />
-                                                </button>
+                                                {['admin', 'system_admin', 'supervisor'].includes(currentUserRole || '') && (
+                                                    <button onClick={() => handleOpenModal(user)} className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors" title="Edit">
+                                                        <Edit className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                                 {['admin', 'system_admin'].includes(currentUserRole || '') && (
                                                     <button onClick={() => { setResetUser(user); setResetPwd(''); setResetShowPwd(false); }}
                                                         className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg transition-colors" title="Reset Password">

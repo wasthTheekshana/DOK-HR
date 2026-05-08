@@ -18,23 +18,32 @@ import Invoices from './pages/Invoices';
 import TaskSummary from './pages/TaskSummary';
 import InvoiceAnalysis from './pages/InvoiceAnalysis';
 
+const LoadingScreen = () => (
+  <div className="flex items-center justify-center h-screen">
+    <div className="flex flex-col items-center space-y-4">
+      <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-slate-600 font-medium">Loading...</p>
+    </div>
+  </div>
+);
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (isLoading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
+
+const RoleProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: string[] }> = ({ children, allowedRoles }) => {
+  const { isAuthenticated, isLoading, role } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (role && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
+const ADMIN_ROLES = ['admin', 'system_admin'];
+const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
 
 function App() {
   return (
@@ -44,18 +53,18 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="sites" element={<Sites />} />
-            <Route path="users" element={<Users />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="attendance" element={<AttendancePage />} />
-            <Route path="payroll" element={<Payroll />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="site-performance" element={<SitePerformance />} />
-            <Route path="time-site-performance" element={<TimeSitePerformance />} />
-            <Route path="invoices" element={<Invoices />} />
-            <Route path="task-summary" element={<TaskSummary />} />
-            <Route path="invoice-analysis" element={<InvoiceAnalysis />} />
+            <Route path="sites" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Sites /></RoleProtectedRoute>} />
+            <Route path="users" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Users /></RoleProtectedRoute>} />
+            <Route path="payroll" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
+            <Route path="reports" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Reports /></RoleProtectedRoute>} />
+            <Route path="analytics" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Analytics /></RoleProtectedRoute>} />
+            <Route path="site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><SitePerformance /></RoleProtectedRoute>} />
+            <Route path="time-site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TimeSitePerformance /></RoleProtectedRoute>} />
+            <Route path="invoices" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Invoices /></RoleProtectedRoute>} />
+            <Route path="task-summary" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TaskSummary /></RoleProtectedRoute>} />
+            <Route path="invoice-analysis" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><InvoiceAnalysis /></RoleProtectedRoute>} />
           </Route>
         </Routes>
       </AuthProvider>
