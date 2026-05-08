@@ -260,6 +260,7 @@ const Tasks: React.FC = () => {
     };
 
     const handleDeleteTask = async (taskId: number) => {
+        if (!isPrivileged) return;
         if (!confirm('Delete this task?')) return;
         setDeletingIds(prev => new Set(prev).add(taskId));
         try {
@@ -609,12 +610,6 @@ const Tasks: React.FC = () => {
                     <>
                         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                             <p className="text-sm font-bold text-slate-700">Employee Tasks</p>
-                            {isPrivileged && users.length > 0 && (
-                                <button onClick={() => openPanel({ mode: 'add', staffId: users[0].ID })}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors">
-                                    <Plus className="w-3.5 h-3.5" /> Add Task
-                                </button>
-                            )}
                         </div>
 
                         {users.length === 0 ? (
@@ -650,8 +645,8 @@ const Tasks: React.FC = () => {
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                     <p className="text-xs text-slate-400">ID: {user.EPF_NUMBER}</p>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isTimeBased ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>
-                                                        {isTimeBased ? 'Time' : 'Target'}
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${siteOtType === 'time_based' ? 'bg-blue-50 text-blue-700' : siteOtType === 'target_based' ? 'bg-violet-50 text-violet-700' : 'bg-orange-50 text-orange-700'}`}>
+                                                        {siteOtType === 'time_based' ? 'Time' : siteOtType === 'target_based' ? 'Target' : 'Outsource'}
                                                     </span>
                                                     {userTasks.length > 0 && (
                                                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600">
@@ -879,7 +874,7 @@ const Tasks: React.FC = () => {
             })()}
         </div>
 
-    </div> {/* end relative outer wrapper */}
+    </div>
     );
 };
 
