@@ -57,10 +57,10 @@ const Tasks: React.FC = () => {
                 const staffSite = allSites.find(s => s.ID === authUser.SITE_ID);
                 setSites(staffSite ? [staffSite] : []);
                 if (staffSite) setSelectedSite(staffSite.SITE_NO);
-            } else if (role === 'supervisor' && authUser?.SITE_ID) {
-                const supervisorSites = allSites.filter(s => s.ID === authUser.SITE_ID);
-                setSites(supervisorSites);
-                if (supervisorSites.length > 0) setSelectedSite(supervisorSites[0].SITE_NO);
+            } else if (role === 'supervisor') {
+                // Server already filters /sites by supervisor_id — allSites is this supervisor's sites
+                setSites(allSites);
+                if (allSites.length > 0) setSelectedSite(allSites[0].SITE_NO);
             } else {
                 setSites(allSites);
                 if (allSites.length > 0) setSelectedSite(allSites[0].SITE_NO);
