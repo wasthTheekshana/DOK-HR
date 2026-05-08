@@ -8,8 +8,10 @@ const DEFAULT_IN_TIME  = '08:30';
 const DAYS_IN_PERIOD = Number(process.env.DAYS_IN_PERIOD) || 22;
 const EXTRA_UNIT_RATE = Number(process.env.EXTRA_UNIT_RATE) || 0.5;
 
-export const getPayroll = async (req: Request, res: Response) => {
+export const getPayroll = async (req: AuthRequest, res: Response) => {
     const { site_no, date_from, date_to, ot_type, view_mode } = req.query;
+    const callerRole = req.user?.role;
+    const callerId   = req.user?.id;
 
     if (!date_from || !date_to || !ot_type) {
         return res.status(400).json({ message: 'Missing required filters' });
@@ -39,6 +41,11 @@ export const getPayroll = async (req: Request, res: Response) => {
             `;
 
             const params: any = { date_from: String(date_from), date_to: String(date_to) };
+
+            if (callerRole === 'supervisor') {
+                query += ` AND s.supervisor_id = :callerId`;
+                params.callerId = callerId;
+            }
 
             if (site_no) {
                 query += ` AND s.site_no = :site_no`;
@@ -106,6 +113,11 @@ export const getPayroll = async (req: Request, res: Response) => {
 
             const params: any = { date_from: String(date_from), date_to: String(date_to) };
 
+            if (callerRole === 'supervisor') {
+                query += ` AND s.supervisor_id = :callerId`;
+                params.callerId = callerId;
+            }
+
             if (site_no) {
                 query += ` AND s.site_no = :site_no`;
                 params.site_no = String(site_no);
@@ -160,6 +172,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                     WHERE s.ot_type = 'staff_outsource'
                       AND a.attendance_date BETWEEN :date_from AND :date_to
                 `;
+                if (callerRole === 'supervisor') sumQuery += ` AND s.supervisor_id = :callerId`;
                 if (site_no) sumQuery += ` AND s.site_no = :site_no`;
                 sumQuery += ` ORDER BY s.site_no, u.name, a.attendance_date`;
 
@@ -223,6 +236,7 @@ export const getPayroll = async (req: Request, res: Response) => {
                 WHERE s.ot_type = 'staff_outsource'
                   AND a.attendance_date BETWEEN :date_from AND :date_to
             `;
+            if (callerRole === 'supervisor') detailQuery += ` AND s.supervisor_id = :callerId`;
             if (site_no) detailQuery += ` AND s.site_no = :site_no`;
             detailQuery += ` ORDER BY s.site_no, u.name, a.attendance_date`;
 

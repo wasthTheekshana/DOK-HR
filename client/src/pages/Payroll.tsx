@@ -45,9 +45,10 @@ const Payroll: React.FC = () => {
     useEffect(() => {
         const loadSites = async () => {
             const res = await api.get('/sites');
-            setSites(res.data);
+            const loadedSites: Site[] = res.data;
+            setSites(loadedSites);
             setSiteFilter('');
-            setOtType('time_based');
+            setOtType(loadedSites[0]?.OT_TYPE || 'time_based');
         };
         loadSites();
     }, []);
