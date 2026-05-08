@@ -590,6 +590,110 @@ const Users: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Member Detail Slide-Over ── */}
+            {viewingUser && (() => {
+                const cfg = getRoleConfig(viewingUser.ROLE);
+                const Icon = cfg.icon;
+                const permanentSite = sites.find(s => s.ID === viewingUser.SITE_ID);
+                const supervisorSites = viewingUser.ROLE === 'supervisor'
+                    ? sites.filter(s => s.SUPERVISOR_ID === viewingUser.ID)
+                    : [];
+                const siteCards: { site: Site; tag: 'Home' | 'Manages' | 'Temp' }[] = [];
+                if (viewingUser.ROLE === 'supervisor') {
+                    supervisorSites.forEach(s => siteCards.push({ site: s, tag: 'Manages' }));
+                } else if (permanentSite) {
+                    siteCards.push({ site: permanentSite, tag: 'Home' });
+                }
+                panelTempSites.forEach(ta => {
+                    const site = sites.find(s => s.ID === ta.SITE_ID);
+                    if (site) siteCards.push({ site, tag: 'Temp' });
+                });
+                return (
+                    <>
+                        {/* Backdrop */}
+                        <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setViewingUser(null)} />
+                        {/* Panel */}
+                        <div className="fixed inset-y-0 right-0 z-50 w-[420px] bg-white shadow-2xl flex flex-col overflow-hidden">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 ${cfg.bg} rounded-full flex items-center justify-center shrink-0`}>
+                                        <Icon className={`w-5 h-5 ${cfg.text}`} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-900 leading-tight">{viewingUser.NAME}</h2>
+                                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold capitalize ${cfg.bg} ${cfg.text}`}>{viewingUser.ROLE}</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => setViewingUser(null)} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors" title="Close">
+                                    <X className="w-4 h-4 text-slate-500" />
+                                </button>
+                            </div>
+                            {/* Scrollable body */}
+                            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                                {/* Profile */}
+                                <div className="space-y-1">
+                                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Profile</h3>
+                                    {[
+                                        { label: 'EPF Number', value: <span className="font-mono">{viewingUser.EPF_NUMBER}</span> },
+                                        { label: 'Status', value: viewingUser.INACTIVATION_REQUESTED
+                                            ? <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600"><AlertTriangle className="w-3 h-3" /> Flagged</span>
+                                            : viewingUser.STATUS === 'active'
+                                                ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><CheckCircle className="w-3 h-3" /> Active</span>
+                                                : <span className="flex items-center gap-1 text-[11px] font-bold text-red-500"><XCircle className="w-3 h-3" /> Inactive</span>
+                                        },
+                                        ...(['admin', 'system_admin'].includes(currentUserRole ?? '') ? [
+                                            { label: 'Basic Salary', value: <span className="font-medium">{viewingUser.BASIC_SALARY ? `Rs. ${Number(viewingUser.BASIC_SALARY).toLocaleString()}` : '—'}</span> },
+                                            { label: 'OT Percentage', value: <span>{viewingUser.OT_PERCENTAGE ? `${viewingUser.OT_PERCENTAGE}%` : '—'}</span> },
+                                            { label: 'Fix Salary', value: <span className="font-medium">{viewingUser.FIX_SALARY ? `Rs. ${Number(viewingUser.FIX_SALARY).toLocaleString()}` : '—'}</span> },
+                                        ] : []),
+                                    ].map(({ label, value }) => (
+                                        <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-50">
+                                            <span className="text-sm text-slate-500">{label}</span>
+                                            <span className="text-sm text-slate-900">{value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* Assigned Sites */}
+                                <div className="space-y-3">
+                                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Assigned Sites</h3>
+                                    {panelTempLoading ? (
+                                        <div className="flex items-center gap-2 py-4">
+                                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                            <span className="text-sm text-slate-400">Loading...</span>
+                                        </div>
+                                    ) : siteCards.length === 0 ? (
+                                        <div className="py-8 text-center">
+                                            <MapPin className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                                            <p className="text-sm text-slate-400 font-medium">No site assigned</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {siteCards.map(({ site, tag }, i) => (
+                                                <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-slate-900">{site.NAME}</p>
+                                                            <p className="text-xs font-mono text-slate-400">{site.SITE_NO}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                        tag === 'Home' ? 'bg-slate-100 text-slate-600' :
+                                                        tag === 'Manages' ? 'bg-indigo-100 text-indigo-700' :
+                                                        'bg-amber-100 text-amber-700'
+                                                    }`}>{tag}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                );
+            })()}
         </div>
     );
 };
