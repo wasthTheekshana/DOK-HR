@@ -5,6 +5,15 @@ import { getDayType, calculateTimeBasedExtra, calculateTimeBasedPayment } from '
 const DEFAULT_OUT_TIME_TC = '17:00';
 const DEFAULT_IN_TIME_TC  = '08:30';
 
+// Returns true when dateStr is strictly before today (local server date).
+function isBackdate(dateStr: string): boolean {
+    if (!dateStr) return false;
+    const taskDate = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return taskDate < today;
+}
+
 // ─── Attendance Sync Helper ──────────────────────────────────────────────────
 async function syncAttendance(
     site_id: number,
@@ -100,6 +109,11 @@ export const createTask = async (req: Request, res: Response) => {
     const { site_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
     // Staff can only create tasks for themselves
     const staff_id = userRole === 'staff' ? userId : req.body.staff_id;
+
+    if (['staff', 'supervisor'].includes(userRole) && isBackdate(task_date)) {
+        return res.status(400).json({ message: 'Backdating is not allowed' });
+    }
+
     try {
         await execute(
             `INSERT INTO tasks (site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time)
@@ -122,6 +136,10 @@ export const updateTask = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
     const userId   = (req as any).user.id;
     const { task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date, target } = req.body;
+
+    if (['staff', 'supervisor'].includes(userRole) && isBackdate(task_date)) {
+        return res.status(400).json({ message: 'Backdating is not allowed' });
+    }
 
     try {
         if (userRole === 'staff') {
@@ -176,6 +194,7 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
         for (const row of rows) {
             const { id, task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date } = row;
             if (!id) continue;
+            if (['staff', 'supervisor'].includes(userRole) && isBackdate(task_date)) continue;
             const taskRes = await execute<any>(
                 `SELECT site_id, staff_id, ot_type FROM tasks WHERE id = :id`,
                 { id }
