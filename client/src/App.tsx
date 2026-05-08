@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -48,6 +49,7 @@ const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
 function App() {
   return (
     <Router>
+      <Toaster position="top-center" toastOptions={{ duration: 3500, style: { fontWeight: 600 } }} />
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />

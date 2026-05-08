@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import toast from 'react-hot-toast';
 import api from '../services/api';
 import type { Task, Site, User } from '../types';
 import { Calendar, MapPin, Target, Loader2, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, Pencil, X, Check, Download, Save } from 'lucide-react';
@@ -253,9 +254,8 @@ const Tasks: React.FC = () => {
 
             const siteLabel = selectedSite === 'ALL' ? 'all_sites' : selectedSite;
             XLSX.writeFile(wb, `tasks_${siteLabel}_${selectedDate}.xlsx`);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to download report');
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || 'Failed to download report');
         }
     };
 
@@ -309,7 +309,10 @@ const Tasks: React.FC = () => {
             });
             cancelNewDraft(staffId, _tid);
             await loadDailySheet();
-        } catch (err) { console.error(err); alert('Failed to save task'); }
+        } catch (err: any) {
+            const msg = err?.response?.data?.message;
+            toast.error(msg === 'Backdating is not allowed' ? 'Backdating is not allowed' : 'Failed to save task');
+        }
         finally { setSavingIds(prev => { const n = new Set(prev); n.delete(_tid); return n; }); }
     };
 
@@ -342,7 +345,10 @@ const Tasks: React.FC = () => {
             });
             cancelEditTask(taskId);
             await loadDailySheet();
-        } catch (err) { console.error(err); alert('Failed to update task'); }
+        } catch (err: any) {
+            const msg = err?.response?.data?.message;
+            toast.error(msg === 'Backdating is not allowed' ? 'Backdating is not allowed' : 'Failed to update task');
+        }
         finally { setSavingIds(prev => { const n = new Set(prev); n.delete(taskId); return n; }); }
     };
 
@@ -352,7 +358,7 @@ const Tasks: React.FC = () => {
         try {
             await api.delete(`/tasks/${taskId}`);
             await loadDailySheet();
-        } catch (err) { console.error(err); alert('Failed to delete task'); }
+        } catch (err: any) { toast.error(err?.response?.data?.message || 'Failed to delete task'); }
         finally { setDeletingIds(prev => { const n = new Set(prev); n.delete(taskId); return n; }); }
     };
 
