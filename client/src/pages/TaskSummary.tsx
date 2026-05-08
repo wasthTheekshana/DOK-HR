@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -11,7 +10,6 @@ import * as XLSX from 'xlsx';
 
 const TaskSummary: React.FC = () => {
     const { role } = useAuth();
-    if (role !== 'system_admin') return <Navigate to="/" replace />;
 
     const today = format(new Date(), 'yyyy-MM-dd');
     const sevenDaysAgo = format(new Date(new Date().setDate(new Date().getDate() - 7)), 'yyyy-MM-dd');
@@ -105,7 +103,7 @@ const TaskSummary: React.FC = () => {
                         </div>
                         <div>
                             <h1 className="text-xl font-bold text-white tracking-tight">Task Summary</h1>
-                            <p className="text-sm text-indigo-300/80 mt-0.5">Site-wise task overview across all projects</p>
+                            <p className="text-sm text-indigo-300/80 mt-0.5">{role === 'supervisor' ? 'Site-wise task overview for your assigned sites' : 'Site-wise task overview across all projects'}</p>
                         </div>
                     </div>
 

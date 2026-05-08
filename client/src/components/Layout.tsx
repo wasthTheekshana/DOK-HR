@@ -25,12 +25,13 @@ const NAV_GROUPS = [
             { to: '/users',          label: 'Team',            icon: Users,           roles: ['admin','supervisor','system_admin'] },
             { to: '/tasks',          label: 'Daily Tasks',     icon: ClipboardList,   roles: ['admin','supervisor','staff'] },
             { to: '/attendance',     label: 'Attendance',      icon: CalendarCheck,   roles: ['admin','supervisor','system_admin','staff'] },
+            { to: '/task-summary',   label: 'Task Summary',    icon: LayoutGrid,      roles: ['supervisor'] },
         ]
     },
     {
         label: 'Finance',
         items: [
-            { to: '/payroll',        label: 'Payroll',         icon: DollarSign,      roles: ['admin','supervisor','system_admin'] },
+            { to: '/payroll',        label: 'Payroll',         icon: DollarSign,      roles: ['admin','system_admin'] },
             { to: '/invoices',          label: 'Invoices',          icon: FileText,   roles: ['admin','system_admin'] },
             { to: '/invoice-analysis', label: 'Invoice Analysis',  icon: PieChart,   roles: ['system_admin'] },
             { to: '/reports',          label: 'Reports',            icon: BarChart3,  roles: ['admin'] },
@@ -42,7 +43,7 @@ const NAV_GROUPS = [
             { to: '/analytics',             label: 'Analytics',           icon: TrendingUp,  roles: ['system_admin'] },
             { to: '/site-performance',      label: 'Target Performance',  icon: Target,      roles: ['system_admin'] },
             { to: '/time-site-performance', label: 'Time Site Analysis',  icon: Clock,       roles: ['system_admin'] },
-            { to: '/task-summary',          label: 'Task Summary',        icon: LayoutGrid,  roles: ['system_admin'] },
+            { to: '/task-summary',          label: 'Task Summary',        icon: LayoutGrid,  roles: ['admin','system_admin'] },
         ]
     },
 ];

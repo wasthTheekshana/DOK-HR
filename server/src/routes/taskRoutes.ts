@@ -9,7 +9,7 @@ router.use(authenticateToken);
 
 router.get('/ot-analysis-report', requireRole(['admin']), getOTAnalysisReport);
 router.get('/target-base-report', requireRole(['admin']), getTargetBaseReport);
-router.get('/daily-summary', requireRole(['admin', 'system_admin']), getTaskSummary);
+router.get('/daily-summary', requireRole(['admin', 'system_admin', 'supervisor']), getTaskSummary);
 router.get('/summary', requireRole(['admin', 'supervisor']), getDailyCountReport);
 router.get('/', getTasks);
 router.post('/', requireRole(['admin', 'supervisor', 'staff']), createTask);

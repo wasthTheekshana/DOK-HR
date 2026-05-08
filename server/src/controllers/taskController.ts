@@ -272,6 +272,8 @@ export const getDailyCountReport = async (req: Request, res: Response) => {
 
 export const getTaskSummary = async (req: Request, res: Response) => {
     const { date, date_to, site_id } = req.query;
+    const callerRole = (req as any).user?.role;
+    const callerId   = (req as any).user?.id;
 
     if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         return res.status(400).json({ message: 'date is required (YYYY-MM-DD)' });
@@ -297,6 +299,11 @@ export const getTaskSummary = async (req: Request, res: Response) => {
         `;
 
         const params: any = { dateFrom, dateTo };
+
+        if (callerRole === 'supervisor') {
+            query += ` AND s.supervisor_id = :callerId`;
+            params.callerId = callerId;
+        }
 
         if (site_id) {
             query += ` AND t.site_id = :site_id`;
