@@ -41,6 +41,11 @@ const Users: React.FC = () => {
     const [resetShowPwd, setResetShowPwd] = useState(false);
     const [resetSaving, setResetSaving]   = useState(false);
 
+    // Member detail panel
+    const [viewingUser, setViewingUser] = useState<User | null>(null);
+    const [panelTempSites, setPanelTempSites] = useState<TempAssignment[]>([]);
+    const [panelTempLoading, setPanelTempLoading] = useState(false);
+
     // Temporary assignments (shown inside edit modal for admin)
     const [assignments, setAssignments]       = useState<TempAssignment[]>([]);
     const [assignSiteId, setAssignSiteId]     = useState<string>('');
@@ -53,6 +58,10 @@ const Users: React.FC = () => {
         const t = setTimeout(() => { fetchUsers(); fetchSites(); }, 300);
         return () => clearTimeout(t);
     }, [roleFilter, searchQuery]);
+
+    useEffect(() => {
+        if (viewingUser) fetchPanelTempSites(viewingUser.ID);
+    }, [viewingUser]);
 
     const fetchUsers = async () => {
         try {
@@ -72,6 +81,16 @@ const Users: React.FC = () => {
             const r = await api.get(`/assignments?staff_id=${userId}`);
             setAssignments(r.data);
         } catch { setAssignments([]); }
+    };
+
+    const fetchPanelTempSites = async (userId: number) => {
+        setPanelTempSites([]);
+        setPanelTempLoading(true);
+        try {
+            const r = await api.get(`/assignments?staff_id=${userId}&active=1`);
+            setPanelTempSites(r.data);
+        } catch { /* silently ignore — panel still shows permanent sites */ }
+        finally { setPanelTempLoading(false); }
     };
 
     const handleOpenModal = (user?: User) => {
@@ -291,6 +310,9 @@ const Users: React.FC = () => {
                                         </td>
                                         <td className="px-5 py-3.5 text-right">
                                             <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => setViewingUser(user)} className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors" title="View">
+                                                    <Eye className="w-3.5 h-3.5" />
+                                                </button>
                                                 {['admin', 'system_admin', 'supervisor'].includes(currentUserRole || '') && (
                                                     <button onClick={() => handleOpenModal(user)} className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors" title="Edit">
                                                         <Edit className="w-3.5 h-3.5" />
