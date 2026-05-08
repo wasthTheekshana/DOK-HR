@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../services/api';
 import type { Task, Site, User } from '../types';
 import { Calendar, MapPin, Target, Loader2, User as UserIcon, BarChart3, LayoutList, Clock, ChevronRight, TrendingUp, Users, Plus, Trash2, Pencil, X, Check, Download, Save } from 'lucide-react';
@@ -35,6 +35,7 @@ const Tasks: React.FC = () => {
     const [editDrafts, setEditDrafts] = useState<Record<number, Partial<Task>>>({});
     const [savingIds, setSavingIds] = useState<Set<string | number>>(new Set());
     const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+    const loadRequestId = useRef(0);
 
     useEffect(() => { fetchSites(); }, []);
 
@@ -51,28 +52,35 @@ const Tasks: React.FC = () => {
     const fetchSites = async () => {
         try {
             const response = await api.get('/sites');
-            setSites(response.data);
+            const allSites: Site[] = response.data;
             if (isStaff && authUser?.SITE_ID) {
-                const staffSite = response.data.find((s: Site) => s.ID === authUser.SITE_ID);
+                const staffSite = allSites.find(s => s.ID === authUser.SITE_ID);
+                setSites(staffSite ? [staffSite] : []);
                 if (staffSite) setSelectedSite(staffSite.SITE_NO);
-            } else if (response.data.length > 0) {
-                setSelectedSite(response.data[0].SITE_NO);
+            } else if (role === 'supervisor' && authUser?.SITE_ID) {
+                const supervisorSites = allSites.filter(s => s.ID === authUser.SITE_ID);
+                setSites(supervisorSites);
+                if (supervisorSites.length > 0) setSelectedSite(supervisorSites[0].SITE_NO);
+            } else {
+                setSites(allSites);
+                if (allSites.length > 0) setSelectedSite(allSites[0].SITE_NO);
             }
         } catch (error) { console.error('Failed to fetch sites', error); }
     };
 
     const loadDailySheet = async () => {
+        const requestId = ++loadRequestId.current;
         setLoading(true);
         try {
             const siteBasic = sites.find(s => s.SITE_NO === selectedSite);
             if (!siteBasic) return;
 
             if (isStaff) {
-                // Staff: skip /users call — use their own profile from auth context
                 const [siteRes, tasksRes] = await Promise.all([
                     api.get(`/sites/${siteBasic.ID}`),
                     api.get(`/tasks?site_no=${selectedSite}&date_from=${selectedDate}&date_to=${selectedDate}`)
                 ]);
+                if (loadRequestId.current !== requestId) return;
                 setUsers(authUser ? [authUser as unknown as User] : []);
                 setTasks(tasksRes.data);
                 setSites(prev => prev.map(s => s.ID === siteBasic.ID ? siteRes.data : s));
@@ -86,14 +94,14 @@ const Tasks: React.FC = () => {
                 api.get(`/users?site=${siteBasic.ID}&role=staff,supervisor&status=active&date=${selectedDate}`),
                 api.get(`/tasks?site_no=${selectedSite}&date_from=${selectedDate}&date_to=${selectedDate}`)
             ]);
-            const allUsers = usersRes.data;
-            setUsers(allUsers);
+            if (loadRequestId.current !== requestId) return;
+            setUsers(usersRes.data);
             setTasks(tasksRes.data);
             setSites(prev => prev.map(s => s.ID === siteBasic.ID ? siteRes.data : s));
             setNewDrafts({});
             setEditDrafts({});
         } catch (error) { console.error('Failed to load daily sheet', error); }
-        finally { setLoading(false); }
+        finally { if (loadRequestId.current === requestId) setLoading(false); }
     };
 
     const loadSummaryData = async () => {

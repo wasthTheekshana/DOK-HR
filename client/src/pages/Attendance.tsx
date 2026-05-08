@@ -7,7 +7,7 @@ import { Calendar, MapPin, Clock, User, CheckCircle, FileText, ClipboardList, Ba
 import * as XLSX from 'xlsx';
 
 const AttendancePage: React.FC = () => {
-    const { role } = useAuth();
+    const { role, user: authUser } = useAuth();
     const isStaff = role === 'staff';
 
     const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -44,7 +44,11 @@ const AttendancePage: React.FC = () => {
         setLoading(true);
         try {
             const params: any = { date_from: dateFrom, date_to: dateTo };
-            if (!isStaff && siteFilter) params.site_no = siteFilter;
+            if (isStaff) {
+                if (authUser?.ID) params.staff_id = authUser.ID;
+            } else if (siteFilter) {
+                params.site_no = siteFilter;
+            }
             const response = await api.get('/attendance', { params });
             setAttendance(response.data);
         } catch (error) { console.error('Failed to fetch attendance', error); }
@@ -65,7 +69,7 @@ const AttendancePage: React.FC = () => {
     // ── Excel downloads ──────────────────────────────────────────────────────
     const downloadLog = () => {
         const rows = attendance.map(a => ({
-            Date: format(new Date(a.ATTENDANCE_DATE), 'yyyy-MM-dd'),
+            Date: String(a.ATTENDANCE_DATE).slice(0, 10),
             Employee: a.STAFF_NAME || '',
             'In Time': a.IN_TIME || '',
             'Out Time': a.OUT_TIME || '',

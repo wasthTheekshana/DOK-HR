@@ -24,10 +24,11 @@ const Login: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!epfNumber.trim()) { setError('EPF Number cannot be blank.'); return; }
         setError('');
         setLoading(true);
         try {
-            const res = await api.post('/auth/login', { epf_number: epfNumber, password });
+            const res = await api.post('/auth/login', { epf_number: epfNumber.trim(), password });
             login(res.data);
             navigate('/');
         } catch (err: any) {

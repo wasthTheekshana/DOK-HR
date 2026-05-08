@@ -90,26 +90,30 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         const loadStats = async () => {
             try {
-                const [sitesRes, usersRes, tasksRes] = await Promise.all([
-                    api.get('/sites'),
-                    api.get('/users'),
-                    api.get('/tasks', {
-                        params: {
-                            date_from: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
-                            date_to:   format(new Date(), 'yyyy-MM-dd'),
-                        },
-                    }),
-                ]);
-                const sites: Site[] = sitesRes.data;
-                const users: User[] = usersRes.data;
-                setUsersList(users);
-                setSitesList(sites);
-                setStats({
-                    totalSites:        sites.length,
-                    totalStaff:        users.filter(u => u.ROLE === 'staff').length,
-                    totalSupervisors:  users.filter(u => u.ROLE === 'supervisor').length,
-                    totalTasks:        tasksRes.data.length,
-                });
+                const taskParams = {
+                    date_from: format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'),
+                    date_to:   format(new Date(), 'yyyy-MM-dd'),
+                };
+                if (role === 'staff') {
+                    const tasksRes = await api.get('/tasks', { params: taskParams });
+                    setStats({ totalSites: 0, totalStaff: 0, totalSupervisors: 0, totalTasks: tasksRes.data.length });
+                } else {
+                    const [sitesRes, usersRes, tasksRes] = await Promise.all([
+                        api.get('/sites'),
+                        api.get('/users'),
+                        api.get('/tasks', { params: taskParams }),
+                    ]);
+                    const sites: Site[] = sitesRes.data;
+                    const users: User[] = usersRes.data;
+                    setUsersList(users);
+                    setSitesList(sites);
+                    setStats({
+                        totalSites:        sites.length,
+                        totalStaff:        users.filter(u => u.ROLE === 'staff').length,
+                        totalSupervisors:  users.filter(u => u.ROLE === 'supervisor').length,
+                        totalTasks:        tasksRes.data.length,
+                    });
+                }
             } catch (e) {
                 console.error('Failed to load dashboard stats', e);
             } finally {
@@ -117,7 +121,7 @@ const Dashboard: React.FC = () => {
             }
         };
         loadStats();
-    }, []);
+    }, [role]);
 
     const ceoDateRange = useCallback(() => {
         return { from: customFrom, to: customTo };
