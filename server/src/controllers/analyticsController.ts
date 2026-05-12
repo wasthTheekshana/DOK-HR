@@ -804,7 +804,7 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
 
             execute<any>(
                 `SELECT
-                    TO_CHAR(created_at, 'YYYY-MM')                                                  AS month,
+                    TO_CHAR(date_to, 'YYYY-MM')                                                     AS month,
                     COUNT(*)                                                                        AS invoice_count,
                     COALESCE(SUM(invoice_price), 0)                                                 AS total_revenue,
                     COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)         AS total_cost,
@@ -813,7 +813,7 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
                     COALESCE(SUM(expense_cost),        0)                                           AS total_expense
                  FROM profit_amount
-                 GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+                 GROUP BY TO_CHAR(date_to, 'YYYY-MM')
                  ORDER BY month`,
                 {}
             ),
@@ -843,13 +843,13 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
 
             execute<any>(
                 `SELECT
-                    TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q') AS quarter,
-                    COUNT(*)                                                          AS invoice_count,
-                    COALESCE(SUM(invoice_price), 0)                                   AS total_revenue,
+                    TO_CHAR(date_to, 'YYYY') || '-Q' || TO_CHAR(date_to, 'Q') AS quarter,
+                    COUNT(*)                                                    AS invoice_count,
+                    COALESCE(SUM(invoice_price), 0)                             AS total_revenue,
                     COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0) AS total_cost,
                     COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit
                  FROM profit_amount
-                 GROUP BY TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q')
+                 GROUP BY TO_CHAR(date_to, 'YYYY') || '-Q' || TO_CHAR(date_to, 'Q')
                  ORDER BY quarter`,
                 {}
             ),
