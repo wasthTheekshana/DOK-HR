@@ -323,8 +323,6 @@ const Reports: React.FC = () => {
         XLSX.writeFile(wb, `custom_ot_report_${customOtDateFrom}_to_${customOtDateTo}.xlsx`);
     };
 
-    const FREQ_OPTIONS  = ['Daily', 'Irregular', 'With Errors', 'Not Updating'] as const;
-    const ACC_OPTIONS   = ['Accurate', 'Wrong Date', 'Wrong Attendance', 'Other'] as const;
     const chk = (selected: boolean) => selected ? '☑' : '☐';
 
     const exportWeeklyPDF = () => {
