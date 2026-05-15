@@ -126,7 +126,7 @@ const Sites: React.FC = () => {
             };
             if (editingSite) await api.put(`/sites/${editingSite.ID}`, payload);
             else await api.post('/sites', payload);
-            fetchSites(); setIsFormOpen(false);
+            await fetchSites(); setIsFormOpen(false);
         } catch { alert('Failed to save site'); } finally { setSaving(false); }
     };
 
@@ -695,7 +695,9 @@ const Sites: React.FC = () => {
                                         <select value={responsiblePersonId} onChange={e => setResponsiblePersonId(e.target.value ? Number(e.target.value) : '')}
                                             className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm">
                                             <option value="">No Responsible Person</option>
-                                            {allUsers.filter(u => u.STATUS === 'active').map(u => (
+                                            {allUsers.filter(u =>
+                                                u.STATUS === 'active' && u.ROLE !== 'system_admin'
+                                            ).map(u => (
                                                 <option key={u.ID} value={u.ID}>{u.NAME} ({u.ROLE})</option>
                                             ))}
                                         </select>
