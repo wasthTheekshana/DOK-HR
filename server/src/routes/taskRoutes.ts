@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTasks, createTask, updateTask, deleteTask, bulkSaveTasks, getTaskSummary, getTargetBaseReport, getOTAnalysisReport, getDailyCountReport } from '../controllers/taskController';
+import { getTasks, createTask, updateTask, deleteTask, bulkSaveTasks, getTaskSummary, getTargetBaseReport, getOTAnalysisReport, getDailyCountReport, getWeeklyOperationReport } from '../controllers/taskController';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticateToken);
 
 
+router.get('/weekly-operation-report', requireRole(['admin', 'system_admin']), getWeeklyOperationReport);
 router.get('/ot-analysis-report', requireRole(['admin']), getOTAnalysisReport);
 router.get('/target-base-report', requireRole(['admin']), getTargetBaseReport);
 router.get('/daily-summary', requireRole(['admin', 'system_admin', 'supervisor']), getTaskSummary);
