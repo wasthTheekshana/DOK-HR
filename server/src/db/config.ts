@@ -23,6 +23,11 @@ export async function initializeDb() {
 
     try {
         const client = await pool.connect();
+        // Safe one-time migrations
+        await client.query(`
+            ALTER TABLE sites
+            ADD COLUMN IF NOT EXISTS responsible_person_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+        `);
         client.release();
         console.log('Database pool created');
     } catch (err) {

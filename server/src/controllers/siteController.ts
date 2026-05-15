@@ -9,10 +9,13 @@ export const getSites = async (req: Request, res: Response) => {
 
         let query = `SELECT s.id, s.site_no, s.name, s.supervisor_id, s.task_invoice_price, s.daily_target,
               s.ot_type, s.service_type, s.site_type, s.status,
+              s.responsible_person_id,
               u.name as supervisor_name,
+              rp.name as responsible_person_name,
               status_counts.staff_count
        FROM sites s
        LEFT JOIN users u ON s.supervisor_id = u.id
+       LEFT JOIN users rp ON s.responsible_person_id = rp.id
        LEFT JOIN (
            SELECT site_id, COUNT(*) as staff_count
            FROM users
@@ -104,16 +107,17 @@ export const getSiteById = async (req: Request, res: Response) => {
 };
 
 export const createSite = async (req: Request, res: Response) => {
-    const { site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
+    const { site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
         const siteResult = await execute<any>(
-            `INSERT INTO sites (site_no, name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
-             VALUES (:site_no, :name, :supervisor_id, :task_invoice_price, :daily_target, :ot_type, :status, :service_type, :site_type)
+            `INSERT INTO sites (site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
+             VALUES (:site_no, :name, :supervisor_id, :responsible_person_id, :task_invoice_price, :daily_target, :ot_type, :status, :service_type, :site_type)
              RETURNING id`,
             {
                 site_no,
                 name,
                 supervisor_id: supervisor_id || null,
+                responsible_person_id: responsible_person_id || null,
                 task_invoice_price: task_invoice_price || 0,
                 daily_target: daily_target || 0,
                 ot_type: ot_type || 'time_based',
@@ -161,12 +165,13 @@ export const createSite = async (req: Request, res: Response) => {
 
 export const updateSite = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, supervisor_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
+    const { name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
         await execute(
             `UPDATE sites
              SET name = :name,
                  supervisor_id = :supervisor_id,
+                 responsible_person_id = :responsible_person_id,
                  task_invoice_price = :task_invoice_price,
                  daily_target = :daily_target,
                  ot_type = :ot_type,
@@ -178,6 +183,7 @@ export const updateSite = async (req: Request, res: Response) => {
             {
                 name,
                 supervisor_id: supervisor_id || null,
+                responsible_person_id: responsible_person_id || null,
                 task_invoice_price: task_invoice_price || 0,
                 daily_target: daily_target || 0,
                 ot_type: ot_type || 'time_based',
