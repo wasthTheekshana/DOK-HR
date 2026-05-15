@@ -43,17 +43,18 @@ const costFactorSchema = z.object({
 });
 
 export const createSiteSchema = z.object({
-    site_no:             z.string().min(1).max(50),
-    name:                z.string().min(1).max(100),
-    supervisor_id:       z.number().int().positive().optional().nullable(),
-    task_invoice_price:  z.number().min(0).optional(),
-    daily_target:        z.number().min(0).optional(),
-    ot_type:             z.enum(['time_based', 'target_based', 'staff_outsource']).optional(),
-    status:              z.enum(['active', 'inactive']).optional(),
-    service_type:        z.string().max(100).optional().nullable(),
-    site_type:           z.string().max(100).optional().nullable(),
-    task_types:          z.array(taskTypeSchema).optional(),
-    cost_factors:        z.array(costFactorSchema).optional(),
+    site_no:                z.string().min(1).max(50),
+    name:                   z.string().min(1).max(100),
+    supervisor_id:          z.number().int().positive().optional().nullable(),
+    responsible_person_id:  z.number().int().positive().optional().nullable(),
+    task_invoice_price:     z.number().min(0).optional(),
+    daily_target:           z.number().min(0).optional(),
+    ot_type:                z.enum(['time_based', 'target_based', 'staff_outsource']).optional(),
+    status:                 z.enum(['active', 'inactive']).optional(),
+    service_type:           z.string().max(100).optional().nullable(),
+    site_type:              z.string().max(100).optional().nullable(),
+    task_types:             z.array(taskTypeSchema).optional(),
+    cost_factors:           z.array(costFactorSchema).optional(),
 });
 
 export const updateSiteSchema = createSiteSchema.partial().refine(

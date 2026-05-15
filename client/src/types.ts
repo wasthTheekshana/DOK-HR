@@ -24,6 +24,8 @@ export interface Site {
     NAME: string;
     SUPERVISOR_ID: number | null;
     SUPERVISOR_NAME?: string;
+    RESPONSIBLE_PERSON_ID?: number | null;
+    RESPONSIBLE_PERSON_NAME?: string;
     STAFF_COUNT?: number;
     TASK_INVOICE_PRICE?: number;
     DAILY_TARGET?: number;

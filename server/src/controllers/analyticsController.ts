@@ -804,7 +804,7 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
 
             execute<any>(
                 `SELECT
-                    TO_CHAR(created_at, 'YYYY-MM')                                                  AS month,
+                    TO_CHAR(date_to, 'YYYY-MM')                                                     AS month,
                     COUNT(*)                                                                        AS invoice_count,
                     COALESCE(SUM(invoice_price), 0)                                                 AS total_revenue,
                     COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0)         AS total_cost,
@@ -813,7 +813,7 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
                     COALESCE(SUM(expense_cost),        0)                                           AS total_expense
                  FROM profit_amount
-                 GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+                 GROUP BY TO_CHAR(date_to, 'YYYY-MM')
                  ORDER BY month`,
                 {}
             ),
@@ -843,13 +843,13 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
 
             execute<any>(
                 `SELECT
-                    TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q') AS quarter,
-                    COUNT(*)                                                          AS invoice_count,
-                    COALESCE(SUM(invoice_price), 0)                                   AS total_revenue,
+                    TO_CHAR(date_to, 'YYYY') || '-Q' || TO_CHAR(date_to, 'Q') AS quarter,
+                    COUNT(*)                                                    AS invoice_count,
+                    COALESCE(SUM(invoice_price), 0)                             AS total_revenue,
                     COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0) AS total_cost,
                     COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit
                  FROM profit_amount
-                 GROUP BY TO_CHAR(created_at, 'YYYY') || '-Q' || TO_CHAR(created_at, 'Q')
+                 GROUP BY TO_CHAR(date_to, 'YYYY') || '-Q' || TO_CHAR(date_to, 'Q')
                  ORDER BY quarter`,
                 {}
             ),
@@ -1363,6 +1363,284 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
 
     } catch (err) {
         console.error('getTimeSitePerformance error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ─── Service Mindmap Analysis ────────────────────────────────────────────────
+
+export const getServiceMindmap = async (req: Request, res: Response) => {
+    const today = new Date();
+    const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    const defaultTo   = today.toISOString().slice(0, 10);
+    const from = (typeof req.query.date_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from)) ? req.query.date_from : defaultFrom;
+    const to   = (typeof req.query.date_to   === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to))   ? req.query.date_to   : defaultTo;
+
+    try {
+        const [sitesRes, taskPerfRes, attendPerfRes] = await Promise.all([
+            execute<any>(
+                `SELECT s.id, s.site_no, s.name,
+                        COALESCE(s.service_type, 'Unclassified') AS service_type,
+                        s.ot_type,
+                        s.daily_target,
+                        s.status,
+                        sup.name  AS supervisor_name,
+                        rp.name   AS responsible_person_name
+                 FROM sites s
+                 LEFT JOIN users sup ON sup.id = s.supervisor_id
+                 LEFT JOIN users rp  ON rp.id  = s.responsible_person_id
+                 WHERE s.status = 'active'
+                 ORDER BY s.service_type NULLS LAST, s.site_no`,
+                {}
+            ),
+            // target_based performance: avg daily actual vs daily_target
+            execute<any>(
+                `SELECT t.site_id,
+                        COUNT(DISTINCT t.task_date)                          AS days_with_tasks,
+                        COALESCE(SUM(COALESCE(t.count, 0)), 0)               AS total_units,
+                        COUNT(DISTINCT t.task_date) * MAX(s.daily_target)    AS expected_units
+                 FROM tasks t
+                 JOIN sites s ON s.id = t.site_id
+                 WHERE t.task_date >= :d_from
+                   AND t.task_date <= :d_to
+                   AND t.ot_type = 'target_based'
+                 GROUP BY t.site_id`,
+                { d_from: from, d_to: to }
+            ),
+            // time_based / staff_outsource: days with at least one attendance record
+            execute<any>(
+                `SELECT t.site_id,
+                        COUNT(DISTINCT t.task_date) AS active_days,
+                        COUNT(DISTINCT t.staff_id)  AS active_staff
+                 FROM tasks t
+                 WHERE t.task_date >= :d_from
+                   AND t.task_date <= :d_to
+                   AND t.ot_type IN ('time_based', 'staff_outsource')
+                 GROUP BY t.site_id`,
+                { d_from: from, d_to: to }
+            ),
+        ]);
+
+        const targetMap = new Map<number, any>((taskPerfRes.rows  || []).map((r: any) => [Number(r.SITE_ID), r]));
+        const attendMap = new Map<number, any>((attendPerfRes.rows || []).map((r: any) => [Number(r.SITE_ID), r]));
+
+        const totalDays = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
+
+        const sites = (sitesRes.rows || []).map((s: any) => {
+            const id        = Number(s.ID);
+            const otType    = s.OT_TYPE || 'time_based';
+            const target    = Number(s.DAILY_TARGET || 0);
+
+            let achievement_pct: number | null = null;
+            let performance: 'over' | 'on_track' | 'under' | 'no_data' = 'no_data';
+
+            if (otType === 'target_based') {
+                const row = targetMap.get(id);
+                if (row && target > 0) {
+                    const totalUnits    = Number(row.TOTAL_UNITS    || 0);
+                    const expectedUnits = Number(row.EXPECTED_UNITS || 0);
+                    if (expectedUnits > 0) {
+                        achievement_pct = Math.round((totalUnits / expectedUnits) * 1000) / 10;
+                        performance = achievement_pct >= 110 ? 'over'
+                                    : achievement_pct >= 90  ? 'on_track'
+                                    : 'under';
+                    }
+                }
+            } else {
+                const row = attendMap.get(id);
+                if (row) {
+                    const activeDays = Number(row.ACTIVE_DAYS || 0);
+                    achievement_pct  = Math.round((activeDays / totalDays) * 1000) / 10;
+                    performance = achievement_pct >= 110 ? 'over'
+                                : achievement_pct >= 60  ? 'on_track'
+                                : 'under';
+                }
+            }
+
+            return {
+                id,
+                site_no:                  s.SITE_NO,
+                name:                     s.NAME,
+                service_type:             s.SERVICE_TYPE,
+                ot_type:                  otType,
+                daily_target:             target,
+                supervisor_name:          s.SUPERVISOR_NAME          || null,
+                responsible_person_name:  s.RESPONSIBLE_PERSON_NAME  || null,
+                achievement_pct,
+                performance,
+            };
+        });
+
+        // Group by service type
+        const typeMap = new Map<string, any[]>();
+        for (const site of sites) {
+            const key = site.service_type;
+            if (!typeMap.has(key)) typeMap.set(key, []);
+            typeMap.get(key)!.push(site);
+        }
+
+        const service_types = Array.from(typeMap.entries()).map(([type, typeSites]) => ({
+            service_type: type,
+            site_count:   typeSites.length,
+            over_count:   typeSites.filter(s => s.performance === 'over').length,
+            on_track_count: typeSites.filter(s => s.performance === 'on_track').length,
+            under_count:  typeSites.filter(s => s.performance === 'under').length,
+            no_data_count: typeSites.filter(s => s.performance === 'no_data').length,
+            sites:        typeSites,
+        })).sort((a, b) => b.site_count - a.site_count);
+
+        res.json({
+            date_range: { from, to },
+            total_sites:  sites.length,
+            service_types,
+        });
+    } catch (err) {
+        console.error('getServiceMindmap error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// ─── Service Site Detail ──────────────────────────────────────────────────────
+
+export const getServiceSiteDetail = async (req: Request, res: Response) => {
+    const { site_id } = req.params;
+    const sid = Number(site_id);
+    if (!sid) return res.status(400).json({ message: 'site_id required' });
+
+    const today = new Date();
+    const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    const defaultTo   = today.toISOString().slice(0, 10);
+    const from = (typeof req.query.date_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from)) ? req.query.date_from : defaultFrom;
+    const to   = (typeof req.query.date_to   === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to))   ? req.query.date_to   : defaultTo;
+
+    try {
+        const [siteRes, summaryRes, dailyRes, staffRes] = await Promise.all([
+            execute<any>(
+                `SELECT s.id, s.site_no, s.name, s.ot_type, s.daily_target, s.service_type, s.site_type,
+                        sup.name AS supervisor_name,
+                        rp.name  AS responsible_person_name
+                 FROM sites s
+                 LEFT JOIN users sup ON sup.id = s.supervisor_id
+                 LEFT JOIN users rp  ON rp.id  = s.responsible_person_id
+                 WHERE s.id = :sid`,
+                { sid }
+            ),
+            execute<any>(
+                `SELECT
+                    COUNT(*)                                                      AS total_records,
+                    COALESCE(SUM(COALESCE(t.count, 0)), 0)                       AS total_units,
+                    COUNT(DISTINCT t.task_date)                                   AS days_with_tasks,
+                    COUNT(DISTINCT t.staff_id)                                    AS unique_staff,
+                    COALESCE(SUM(
+                        CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' AND t.out_time ~ '^\\d{2}:\\d{2}'
+                        THEN GREATEST(0, ROUND((
+                            (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
+                          - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
+                        )::numeric, 2))
+                        ELSE 0 END
+                    ), 0)                                                          AS total_hours
+                 FROM tasks t
+                 WHERE t.site_id = :sid
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to`,
+                { sid, d_from: from, d_to: to }
+            ),
+            execute<any>(
+                `SELECT TO_CHAR(t.task_date, 'YYYY-MM-DD')          AS task_date,
+                        COALESCE(SUM(COALESCE(t.count, 0)), 0)       AS units,
+                        COUNT(DISTINCT t.staff_id)                    AS workers,
+                        COALESCE(SUM(
+                            CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' AND t.out_time ~ '^\\d{2}:\\d{2}'
+                            THEN GREATEST(0, ROUND((
+                                (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
+                              - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
+                            )::numeric, 2))
+                            ELSE 0 END
+                        ), 0)                                          AS hours
+                 FROM tasks t
+                 WHERE t.site_id = :sid
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
+                 GROUP BY t.task_date
+                 ORDER BY t.task_date`,
+                { sid, d_from: from, d_to: to }
+            ),
+            execute<any>(
+                `SELECT u.name,
+                        u.epf_number,
+                        COUNT(DISTINCT t.task_date)                   AS active_days,
+                        COALESCE(SUM(COALESCE(t.count, 0)), 0)        AS total_units,
+                        COALESCE(SUM(
+                            CASE WHEN t.in_time ~ '^\\d{2}:\\d{2}' AND t.out_time ~ '^\\d{2}:\\d{2}'
+                            THEN GREATEST(0, ROUND((
+                                (SUBSTRING(t.out_time,1,2)::numeric + SUBSTRING(t.out_time,4,2)::numeric/60)
+                              - (SUBSTRING(t.in_time,1,2)::numeric  + SUBSTRING(t.in_time,4,2)::numeric/60)
+                            )::numeric, 2))
+                            ELSE 0 END
+                        ), 0)                                          AS total_hours
+                 FROM tasks t
+                 JOIN users u ON u.id = t.staff_id
+                 WHERE t.site_id = :sid
+                   AND t.task_date >= :d_from
+                   AND t.task_date <= :d_to
+                 GROUP BY u.id, u.name, u.epf_number
+                 ORDER BY total_units DESC, active_days DESC`,
+                { sid, d_from: from, d_to: to }
+            ),
+        ]);
+
+        const site  = siteRes.rows?.[0];
+        if (!site) return res.status(404).json({ message: 'Site not found' });
+
+        const sm    = summaryRes.rows?.[0] || {};
+        const totalDays = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
+        const daysWithTasks = Number(sm.DAYS_WITH_TASKS || 0);
+        const totalUnits    = Number(sm.TOTAL_UNITS || 0);
+        const dailyTarget   = Number(site.DAILY_TARGET || 0);
+        const expectedUnits = daysWithTasks * dailyTarget;
+        const achievementPct = (site.OT_TYPE === 'target_based' && expectedUnits > 0)
+            ? Math.round((totalUnits / expectedUnits) * 1000) / 10
+            : (daysWithTasks > 0 ? Math.round((daysWithTasks / totalDays) * 1000) / 10 : 0);
+
+        res.json({
+            date_range: { from, to, total_days: totalDays },
+            site: {
+                id:                      Number(site.ID),
+                site_no:                 site.SITE_NO,
+                name:                    site.NAME,
+                ot_type:                 site.OT_TYPE || 'time_based',
+                daily_target:            dailyTarget,
+                service_type:            site.SERVICE_TYPE || '—',
+                site_type:               site.SITE_TYPE || '—',
+                supervisor_name:         site.SUPERVISOR_NAME || null,
+                responsible_person_name: site.RESPONSIBLE_PERSON_NAME || null,
+            },
+            summary: {
+                total_records:   Number(sm.TOTAL_RECORDS   || 0),
+                total_units:     totalUnits,
+                days_with_tasks: daysWithTasks,
+                unique_staff:    Number(sm.UNIQUE_STAFF    || 0),
+                total_hours:     Number(sm.TOTAL_HOURS     || 0),
+                expected_units:  expectedUnits,
+                achievement_pct: achievementPct,
+            },
+            daily: (dailyRes.rows || []).map((r: any) => ({
+                date:    r.TASK_DATE,
+                units:   Number(r.UNITS),
+                workers: Number(r.WORKERS),
+                hours:   Number(r.HOURS),
+                target:  dailyTarget,
+            })),
+            staff: (staffRes.rows || []).map((r: any) => ({
+                name:        r.NAME,
+                epf_number:  r.EPF_NUMBER || '—',
+                active_days: Number(r.ACTIVE_DAYS),
+                total_units: Number(r.TOTAL_UNITS),
+                total_hours: Number(r.TOTAL_HOURS),
+            })),
+        });
+    } catch (err) {
+        console.error('getServiceSiteDetail error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 };

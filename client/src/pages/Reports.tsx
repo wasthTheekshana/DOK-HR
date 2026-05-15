@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import type { Site } from '../types';
-import { format } from 'date-fns';
-import { FileText, Download, Printer, Filter, Calculator, Clock, ClipboardList, Target, Save, Archive } from 'lucide-react';
+import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
+import { FileText, Download, Printer, Filter, Calculator, Clock, ClipboardList, Target, Save, Archive, BarChart2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 const Reports: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'daily_count' | 'salary' | 'ot_analysis' | 'custom_ot'>('daily_count');
+    const [activeTab, setActiveTab] = useState<'daily_count' | 'salary' | 'ot_analysis' | 'custom_ot' | 'weekly_report'>('daily_count');
     const [sites, setSites] = useState<Site[]>([]);
     const [selectedSite, setSelectedSite] = useState('');
     const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -41,6 +41,34 @@ const Reports: React.FC = () => {
     const [histDateFrom, setHistDateFrom] = useState(format(new Date(new Date().setDate(1)), 'yyyy-MM-dd'));
     const [histDateTo, setHistDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [histSiteNo, setHistSiteNo] = useState('');
+
+    // Weekly Report
+    type WeeklyMode = 'this_week' | 'last_week' | 'custom';
+    const getWeekRange = (offset: number) => {
+        const base = subWeeks(new Date(), offset);
+        return {
+            from: format(startOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+            to:   format(endOfWeek(base,   { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+        };
+    };
+    const [weeklyMode, setWeeklyMode] = useState<WeeklyMode>('this_week');
+    const [weeklyCustomFrom, setWeeklyCustomFrom] = useState(format(new Date(new Date().setDate(1)), 'yyyy-MM-dd'));
+    const [weeklyCustomTo,   setWeeklyCustomTo]   = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [weeklyData, setWeeklyData] = useState<any>(null);
+    const [weeklyLoading, setWeeklyLoading] = useState(false);
+
+    const weeklyDateRange = weeklyMode === 'this_week' ? getWeekRange(0)
+                          : weeklyMode === 'last_week' ? getWeekRange(1)
+                          : { from: weeklyCustomFrom, to: weeklyCustomTo };
+
+    const fetchWeeklyReport = async (from: string, to: string) => {
+        setWeeklyLoading(true);
+        try {
+            const res = await api.get('/tasks/weekly-operation-report', { params: { date_from: from, date_to: to } });
+            setWeeklyData(res.data);
+        } catch { setWeeklyData(null); }
+        finally { setWeeklyLoading(false); }
+    };
 
     useEffect(() => {
         const loadSites = async () => {
@@ -254,6 +282,12 @@ const Reports: React.FC = () => {
         if (showOTHistory && activeTab === 'custom_ot') fetchOTHistory();
     }, [showOTHistory, histDateFrom, histDateTo, histSiteNo, activeTab]);
 
+    useEffect(() => {
+        if (activeTab === 'weekly_report') {
+            fetchWeeklyReport(weeklyDateRange.from, weeklyDateRange.to);
+        }
+    }, [activeTab, weeklyMode, weeklyCustomFrom, weeklyCustomTo]);
+
     const exportCustomOTPDF = () => {
         const doc = new jsPDF();
         doc.setFontSize(18); doc.text('Custom OT Percentage Report', 14, 20);
@@ -289,11 +323,115 @@ const Reports: React.FC = () => {
         XLSX.writeFile(wb, `custom_ot_report_${customOtDateFrom}_to_${customOtDateTo}.xlsx`);
     };
 
+    const chk = (selected: boolean) => selected ? '☑' : '☐';
+
+    const exportWeeklyPDF = () => {
+        if (!weeklyData) return;
+        const { sites, date_from, date_to } = weeklyData;
+        const doc = new jsPDF({ orientation: 'landscape' });
+        const title = `DOK Operation System – Weekly Performance Analysis`;
+        const period = `Period: ${date_from} to ${date_to}`;
+        doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+        doc.text(title, 14, 16);
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        doc.text(period, 14, 23);
+
+        const head = [['#', 'Site No', 'Site Name', 'Update Frequency', 'Regular Since', 'Days Missed', 'Update Accuracy', 'Common Errors', 'Tech Issues', 'Remarks']];
+        const freqLabel: Record<string, string> = { Daily: 'Daily ✓', Irregular: 'Irregular ✓', 'With Errors': 'With Errors ✓', 'Not Updating': 'Not Updating ✓' };
+        const accLabel:  Record<string, string> = { Accurate: 'Accurate ✓', 'Wrong Date': 'Wrong Date ✓', 'Wrong Attendance': 'Wrong Attendance ✓', Other: 'Other ✓' };
+
+        const body = (sites as any[]).map((s: any) => [
+            s.index, s.site_no, s.site_name,
+            freqLabel[s.update_frequency] || s.update_frequency,
+            s.regular_since || '—',
+            s.days_missed,
+            accLabel[s.update_accuracy] || s.update_accuracy,
+            s.common_errors || '—',
+            s.technical_issues ? 'Yes' : 'No',
+            s.remarks || '—',
+        ]);
+
+        autoTable(doc, {
+            head,
+            body,
+            startY: 28,
+            styles: { fontSize: 7, cellPadding: 2 },
+            headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold' },
+            columnStyles: {
+                0: { cellWidth: 8 }, 1: { cellWidth: 18 }, 2: { cellWidth: 42 },
+                3: { cellWidth: 28 }, 4: { cellWidth: 22 }, 5: { cellWidth: 16 },
+                6: { cellWidth: 28 }, 7: { cellWidth: 40 }, 8: { cellWidth: 16 }, 9: { cellWidth: 28 },
+            },
+            didParseCell: (data: any) => {
+                if (data.section === 'body') {
+                    const row = sites[data.row.index] as any;
+                    if (!row) return;
+                    if (row.update_frequency === 'Not Updating') {
+                        data.cell.styles.textColor = [220, 38, 38];
+                    } else if (row.update_frequency === 'Daily') {
+                        if (data.column.index === 3) data.cell.styles.textColor = [5, 150, 105];
+                    }
+                }
+            },
+        });
+
+        doc.save(`DOK_Weekly_Report_${date_from}_to_${date_to}.pdf`);
+    };
+
+    const exportWeeklyCSV = () => {
+        if (!weeklyData) return;
+        const { sites, date_from, date_to } = weeklyData;
+        const headers = ['#', 'Site No', 'Site Name', 'Update Frequency', 'Regular Since (Date)',
+                         'Days Missed', 'Update Accuracy', 'Common Errors', 'Technical Issues', 'Remarks'];
+        const rows = (sites as any[]).map((s: any) => [
+            s.index, s.site_no, `"${s.site_name}"`, s.update_frequency,
+            s.regular_since || '', s.days_missed, s.update_accuracy,
+            `"${s.common_errors || ''}"`, s.technical_issues ? 'Yes' : 'No', `"${s.remarks || ''}"`,
+        ]);
+        const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `DOK_Weekly_Report_${date_from}_to_${date_to}.csv`;
+        a.click(); URL.revokeObjectURL(url);
+    };
+
+    const exportWeeklyExcel = () => {
+        if (!weeklyData) return;
+        const { sites, date_from, date_to } = weeklyData;
+        const title = `DOK Operation System Data Update Progress & Performance Analysis Chart – ${date_from} to ${date_to}`;
+        const globalHeader = ['#', 'Site Name', 'Update Frequency', 'Regular Since (Date)', 'Days Missed', 'Update Accuracy', 'Common Errors (if any)', 'Technical Issues', 'Remarks / Action Required'];
+
+        const aoa: any[][] = [
+            [title, '', '', '', '', '', '', '', ''],
+            [],
+            globalHeader,
+        ];
+
+        (sites as any[]).forEach((s: any) => {
+            aoa.push([
+                s.index, s.site_name, 'Update Frequency', 'Regular Since (Date)',
+                'Days Missed', 'Update Accuracy', 'Common Errors (if any)', 'Technical Issues', 'Remarks / Action Required',
+            ]);
+            aoa.push(['', '', chk(s.update_frequency === 'Daily')      + ' Daily',        s.regular_since || '', s.days_missed, chk(s.update_accuracy === 'Accurate')           + ' Accurate',           s.common_errors || '', chk(s.technical_issues)       + ' Yes', s.remarks || '']);
+            aoa.push(['', '', chk(s.update_frequency === 'Irregular')   + ' Irregular',    '', '', chk(s.update_accuracy === 'Wrong Date')          + ' Wrong Date',         '', chk(!s.technical_issues)     + ' No', '']);
+            aoa.push(['', '', chk(s.update_frequency === 'With Errors') + ' With Errors',  '', '', chk(s.update_accuracy === 'Wrong Attendance')     + ' Wrong Attendance',   '', '', '']);
+            aoa.push(['', '', chk(s.update_frequency === 'Not Updating')+ ' Not Updating', '', '', chk(s.update_accuracy === 'Other')               + ' Other',              '', '', '']);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [4, 28, 18, 16, 10, 18, 30, 12, 30].map(w => ({ wch: w }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
+        XLSX.writeFile(wb, `DOK_Weekly_Report_${date_from}_to_${date_to}.xlsx`);
+    };
+
     const tabs = [
-        { id: 'daily_count' as const, label: 'Daily Count', icon: ClipboardList },
-        { id: 'salary' as const, label: 'Target Base', icon: Target },
-        { id: 'ot_analysis' as const, label: 'OT Analysis', icon: Clock },
-        { id: 'custom_ot' as const, label: 'Custom OT %', icon: Calculator },
+        { id: 'daily_count'   as const, label: 'Daily Count',    icon: ClipboardList },
+        { id: 'salary'        as const, label: 'Target Base',     icon: Target },
+        { id: 'ot_analysis'   as const, label: 'OT Analysis',     icon: Clock },
+        { id: 'custom_ot'     as const, label: 'Custom OT %',     icon: Calculator },
+        { id: 'weekly_report' as const, label: 'Weekly Report',   icon: BarChart2 },
     ];
 
     const SiteSelect = ({ value, onChange }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void }) => (
@@ -828,6 +966,167 @@ const Reports: React.FC = () => {
                             )}
                         </div>
                     )}
+                </div>
+            )}
+            {/* Weekly Operation Report */}
+            {activeTab === 'weekly_report' && (
+                <div className="space-y-5">
+                    {/* Filters */}
+                    <div className="card p-5">
+                        <div className="flex flex-wrap items-end gap-4">
+                            {/* Mode toggles */}
+                            <div>
+                                <FilterLabel>Period</FilterLabel>
+                                <div className="flex gap-1.5">
+                                    {([
+                                        { id: 'this_week', label: 'This Week' },
+                                        { id: 'last_week', label: 'Last Week' },
+                                        { id: 'custom',    label: 'Custom' },
+                                    ] as { id: WeeklyMode; label: string }[]).map(m => (
+                                        <button key={m.id} onClick={() => setWeeklyMode(m.id)}
+                                            className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${weeklyMode === m.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                            {m.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {weeklyMode === 'custom' && (
+                                <>
+                                    <div>
+                                        <FilterLabel>From</FilterLabel>
+                                        <DateInput value={weeklyCustomFrom} onChange={(e) => setWeeklyCustomFrom(e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <FilterLabel>To</FilterLabel>
+                                        <DateInput value={weeklyCustomTo} onChange={(e) => setWeeklyCustomTo(e.target.value)} />
+                                    </div>
+                                </>
+                            )}
+
+                            {weeklyMode !== 'custom' && (
+                                <div className="flex items-end pb-0.5">
+                                    <span className="text-sm font-semibold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-xl">
+                                        {weeklyDateRange.from} → {weeklyDateRange.to}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Export buttons */}
+                            {weeklyData && (weeklyData.sites || []).length > 0 && (
+                                <div className="flex gap-2 ml-auto">
+                                    <button onClick={exportWeeklyPDF}
+                                        className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition-all active:scale-95">
+                                        <Printer className="w-4 h-4" /><span className="hidden sm:inline">PDF</span>
+                                    </button>
+                                    <button onClick={exportWeeklyCSV}
+                                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-all active:scale-95">
+                                        <Download className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
+                                    </button>
+                                    <button onClick={exportWeeklyExcel}
+                                        className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all active:scale-95">
+                                        <FileText className="w-4 h-4" /><span className="hidden sm:inline">Excel</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Summary badges */}
+                    {!weeklyLoading && weeklyData && (weeklyData.sites || []).length > 0 && (() => {
+                        const s = weeklyData.sites as any[];
+                        const daily      = s.filter((x: any) => x.update_frequency === 'Daily').length;
+                        const irregular  = s.filter((x: any) => x.update_frequency === 'Irregular').length;
+                        const withErrors = s.filter((x: any) => x.update_frequency === 'With Errors').length;
+                        const notUpdating= s.filter((x: any) => x.update_frequency === 'Not Updating').length;
+                        return (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {[
+                                    { label: 'Daily',       count: daily,       bg: 'bg-emerald-50', tc: 'text-emerald-700', bc: 'border-emerald-200' },
+                                    { label: 'Irregular',   count: irregular,   bg: 'bg-amber-50',   tc: 'text-amber-700',   bc: 'border-amber-200' },
+                                    { label: 'With Errors', count: withErrors,  bg: 'bg-orange-50',  tc: 'text-orange-700',  bc: 'border-orange-200' },
+                                    { label: 'Not Updating',count: notUpdating, bg: 'bg-red-50',     tc: 'text-red-700',     bc: 'border-red-200' },
+                                ].map((c, i) => (
+                                    <div key={i} className={`${c.bg} border ${c.bc} rounded-xl p-4 flex items-center gap-3`}>
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{c.label}</p>
+                                            <p className={`text-2xl font-black ${c.tc}`}>{c.count}</p>
+                                            <p className="text-[10px] text-slate-400">{Math.round(c.count / s.length * 100)}% of sites</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
+
+                    {/* Table */}
+                    <div className="card overflow-hidden">
+                        {weeklyLoading ? <LoadingState /> :
+                         !weeklyData || (weeklyData.sites || []).length === 0 ? <EmptyState /> : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-slate-100 text-xs">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">#</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Site</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Update Frequency</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Regular Since</th>
+                                            <th className="px-4 py-3 text-right font-semibold text-slate-500 uppercase tracking-wider">Days Missed</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Update Accuracy</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Common Errors</th>
+                                            <th className="px-4 py-3 text-center font-semibold text-slate-500 uppercase tracking-wider">Tech Issues</th>
+                                            <th className="px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider">Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {(weeklyData.sites as any[]).map((row: any) => {
+                                            const freqColor =
+                                                row.update_frequency === 'Daily'        ? 'bg-emerald-100 text-emerald-700' :
+                                                row.update_frequency === 'Irregular'    ? 'bg-amber-100 text-amber-700' :
+                                                row.update_frequency === 'With Errors'  ? 'bg-orange-100 text-orange-700' :
+                                                                                           'bg-red-100 text-red-700';
+                                            const accColor =
+                                                row.update_accuracy === 'Accurate'         ? 'bg-emerald-100 text-emerald-700' :
+                                                row.update_accuracy === 'Wrong Date'       ? 'bg-amber-100 text-amber-700' :
+                                                row.update_accuracy === 'Wrong Attendance' ? 'bg-orange-100 text-orange-700' :
+                                                                                              'bg-slate-100 text-slate-600';
+                                            const rowBg = row.update_frequency === 'Not Updating' ? 'bg-red-50/40' : '';
+                                            return (
+                                                <tr key={row.index} className={`hover:bg-slate-50/60 transition-colors ${rowBg}`}>
+                                                    <td className="px-4 py-3 font-bold text-slate-400">{row.index}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <p className="font-bold text-slate-900">{row.site_no}</p>
+                                                        <p className="text-slate-400 text-[10px]">{row.site_name}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${freqColor}`}>
+                                                            {row.update_frequency}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-600">{row.regular_since || '—'}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <span className={`font-bold ${row.days_missed > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{row.days_missed}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${accColor}`}>
+                                                            {row.update_accuracy}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate">{row.common_errors || '—'}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${row.technical_issues ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                            {row.technical_issues ? 'Yes' : 'No'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-500">{row.remarks || '—'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

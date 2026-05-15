@@ -564,3 +564,98 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+export const getWeeklyOperationReport = async (req: Request, res: Response) => {
+    const { date_from, date_to } = req.query as { date_from: string; date_to: string };
+    if (!date_from || !date_to) return res.status(400).json({ message: 'date_from and date_to required' });
+
+    try {
+        const from = new Date(date_from + 'T00:00:00');
+        const to   = new Date(date_to   + 'T00:00:00');
+        const totalDays = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+
+        const [sitesRes, taskStatsRes, attStatsRes] = await Promise.all([
+            execute<any>(`SELECT id, site_no, name FROM sites WHERE status = 'active' ORDER BY site_no`, {}),
+
+            execute<any>(`
+                SELECT t.site_id,
+                       COUNT(DISTINCT t.task_date)                                AS days_with_tasks,
+                       MIN(TO_CHAR(t.task_date, 'YYYY-MM-DD'))                    AS first_task_date,
+                       COUNT(*)                                                   AS total_tasks,
+                       COUNT(CASE WHEN t.in_time IS NULL OR t.out_time IS NULL THEN 1 END) AS missing_times
+                FROM tasks t
+                WHERE t.task_date >= :df AND t.task_date <= :dt
+                GROUP BY t.site_id`,
+                { df: date_from, dt: date_to }
+            ),
+
+            execute<any>(`
+                SELECT a.site_id,
+                       COUNT(*) AS total_att,
+                       COUNT(CASE WHEN a.in_time IS NULL OR a.out_time IS NULL THEN 1 END) AS incomplete_att
+                FROM attendance a
+                WHERE a.attendance_date >= :df AND a.attendance_date <= :dt
+                GROUP BY a.site_id`,
+                { df: date_from, dt: date_to }
+            ),
+        ]);
+
+        const taskMap = new Map<number, any>();
+        (taskStatsRes.rows || []).forEach((r: any) => taskMap.set(Number(r.SITE_ID), r));
+
+        const attMap = new Map<number, any>();
+        (attStatsRes.rows || []).forEach((r: any) => attMap.set(Number(r.SITE_ID), r));
+
+        const sites = (sitesRes.rows || []).map((site: any, idx: number) => {
+            const siteId     = Number(site.ID);
+            const ts         = taskMap.get(siteId);
+            const as_        = attMap.get(siteId);
+
+            const daysWithTasks   = ts ? Number(ts.DAYS_WITH_TASKS) : 0;
+            const missingTimes    = ts ? Number(ts.MISSING_TIMES)   : 0;
+            const totalTasks      = ts ? Number(ts.TOTAL_TASKS)      : 0;
+            const incompleteAtt   = as_ ? Number(as_.INCOMPLETE_ATT) : 0;
+            const totalAtt        = as_ ? Number(as_.TOTAL_ATT)      : 0;
+            const daysMissed      = Math.max(totalDays - daysWithTasks, 0);
+            const coverage        = totalDays > 0 ? daysWithTasks / totalDays : 0;
+
+            let updateFrequency: string;
+            if (daysWithTasks === 0)         updateFrequency = 'Not Updating';
+            else if (coverage >= 0.9)        updateFrequency = 'Daily';
+            else if (missingTimes > totalTasks * 0.3) updateFrequency = 'With Errors';
+            else                             updateFrequency = 'Irregular';
+
+            let updateAccuracy: string;
+            if (daysWithTasks === 0)                          updateAccuracy = 'Other';
+            else if (incompleteAtt > totalAtt * 0.3)          updateAccuracy = 'Wrong Attendance';
+            else if (missingTimes > totalTasks * 0.3)         updateAccuracy = 'Wrong Date';
+            else                                              updateAccuracy = 'Accurate';
+
+            const regularSince = ts?.FIRST_TASK_DATE ? String(ts.FIRST_TASK_DATE) : '';
+
+            let commonErrors = '';
+            if (daysWithTasks === 0)         commonErrors = 'No updates in period';
+            else if (incompleteAtt > 0)      commonErrors = `${incompleteAtt} attendance record(s) missing in/out time`;
+            else if (daysMissed > 0)         commonErrors = `${daysMissed} day(s) without task updates`;
+
+            return {
+                index:            idx + 1,
+                site_id:          siteId,
+                site_no:          site.SITE_NO,
+                site_name:        site.NAME,
+                update_frequency: updateFrequency,
+                regular_since:    regularSince,
+                days_missed:      daysMissed,
+                update_accuracy:  updateAccuracy,
+                common_errors:    commonErrors,
+                technical_issues: false,
+                remarks:          '',
+            };
+        });
+
+        res.json({ sites, date_from, date_to, total_days: totalDays });
+    } catch (err) {
+        console.error('getWeeklyOperationReport error', err);
+        res.status(500).json({ message: 'Failed to generate report' });
+    }
+};

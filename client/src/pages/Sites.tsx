@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { Site, User } from '../types';
-import { Plus, Edit, Trash2, MapPin, Users as UsersIcon, Target, Clock, X, Briefcase, Building2, DollarSign, Eye, ChevronRight, Search, PowerOff } from 'lucide-react';
+import { Plus, Edit, Trash2, MapPin, Users as UsersIcon, Target, Clock, X, Briefcase, Building2, DollarSign, Eye, ChevronRight, Search, PowerOff, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const SERVICE_TYPES = ['Physical', 'Scanning', 'Data entry', 'Insurance Policy', 'Staff outsource', 'DMS'];
@@ -17,11 +17,13 @@ const Sites: React.FC = () => {
     const { role } = useAuth();
     const [sites, setSites] = useState<Site[]>([]);
     const [supervisors, setSupervisors] = useState<User[]>([]);
+    const [allUsers, setAllUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Search + status filter
+    // Search + status + responsible person filter
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+    const [personFilter, setPersonFilter] = useState<string>(''); // responsible person name
 
     // Modals
     const [isFormOpen, setIsFormOpen]     = useState(false);
@@ -29,19 +31,20 @@ const Sites: React.FC = () => {
     const [editingSite, setEditingSite]   = useState<Site | null>(null);
 
     // Form state
-    const [siteNo, setSiteNo]             = useState('');
-    const [name, setName]                 = useState('');
-    const [supervisorId, setSupervisorId] = useState<number | ''>('');
-    const [dailyTarget, setDailyTarget]   = useState<number>(0);
-    const [otType, setOtType]             = useState<'time_based' | 'target_based' | 'staff_outsource'>('time_based');
-    const [serviceType, setServiceType]   = useState('');
-    const [siteType, setSiteType]         = useState('');
-    const [taskTypes, setTaskTypes]       = useState<{ task_name: string; invoice_price: number }[]>([]);
-    const [costFactors, setCostFactors]   = useState<{ key: string; value: string }[]>([]);
-    const [siteStatus, setSiteStatus]     = useState<'active' | 'inactive'>('active');
-    const [saving, setSaving]             = useState(false);
+    const [siteNo, setSiteNo]                       = useState('');
+    const [name, setName]                           = useState('');
+    const [supervisorId, setSupervisorId]           = useState<number | ''>('');
+    const [responsiblePersonId, setResponsiblePersonId] = useState<number | ''>('');
+    const [dailyTarget, setDailyTarget]             = useState<number>(0);
+    const [otType, setOtType]                       = useState<'time_based' | 'target_based' | 'staff_outsource'>('time_based');
+    const [serviceType, setServiceType]             = useState('');
+    const [siteType, setSiteType]                   = useState('');
+    const [taskTypes, setTaskTypes]                 = useState<{ task_name: string; invoice_price: number }[]>([]);
+    const [costFactors, setCostFactors]             = useState<{ key: string; value: string }[]>([]);
+    const [siteStatus, setSiteStatus]               = useState<'active' | 'inactive'>('active');
+    const [saving, setSaving]                       = useState(false);
 
-    useEffect(() => { fetchSites(); fetchSupervisors(); }, []);
+    useEffect(() => { fetchSites(); fetchSupervisors(); fetchAllUsers(); }, []);
 
     const fetchSites = async () => {
         try { const r = await api.get('/sites'); setSites(r.data); }
@@ -53,8 +56,13 @@ const Sites: React.FC = () => {
         catch (e) { console.error(e); }
     };
 
+    const fetchAllUsers = async () => {
+        try { const r = await api.get('/users'); setAllUsers(r.data); }
+        catch (e) { console.error(e); }
+    };
+
     const resetForm = () => {
-        setSiteNo(''); setName(''); setSupervisorId('');
+        setSiteNo(''); setName(''); setSupervisorId(''); setResponsiblePersonId('');
         setDailyTarget(0); setOtType('time_based'); setSiteStatus('active');
         setServiceType(''); setSiteType('');
         setTaskTypes([{ task_name: '', invoice_price: 0 }]);
@@ -67,6 +75,7 @@ const Sites: React.FC = () => {
             setSiteNo(site.SITE_NO);
             setName(site.NAME);
             setSupervisorId(site.SUPERVISOR_ID || '');
+            setResponsiblePersonId(site.RESPONSIBLE_PERSON_ID || '');
             setDailyTarget(site.DAILY_TARGET || 0);
             const validOtTypes = ['time_based', 'target_based', 'staff_outsource'] as const;
             const ot = validOtTypes.includes(site.OT_TYPE as any) ? (site.OT_TYPE as 'time_based' | 'target_based' | 'staff_outsource') : 'time_based';
@@ -105,6 +114,7 @@ const Sites: React.FC = () => {
             const payload = {
                 site_no: siteNo, name,
                 supervisor_id: supervisorId || null,
+                responsible_person_id: responsiblePersonId || null,
                 task_invoice_price: 0,
                 daily_target: dailyTarget || 0,
                 ot_type: otType,
@@ -116,7 +126,7 @@ const Sites: React.FC = () => {
             };
             if (editingSite) await api.put(`/sites/${editingSite.ID}`, payload);
             else await api.post('/sites', payload);
-            fetchSites(); setIsFormOpen(false);
+            await fetchSites(); setIsFormOpen(false);
         } catch { alert('Failed to save site'); } finally { setSaving(false); }
     };
 
@@ -130,8 +140,18 @@ const Sites: React.FC = () => {
     const handleCostFactorChange = (i: number, field: 'key' | 'value', value: string) =>
         setCostFactors(costFactors.map((f, idx) => idx === i ? { ...f, [field]: value } : f));
 
+    // Unique responsible persons across all sites (for filter dropdown)
+    const responsiblePersons = Array.from(
+        new Map(
+            sites
+                .filter(s => s.RESPONSIBLE_PERSON_NAME)
+                .map(s => [s.RESPONSIBLE_PERSON_ID, s.RESPONSIBLE_PERSON_NAME!])
+        ).entries()
+    ).sort((a, b) => a[1].localeCompare(b[1]));
+
     const filteredSites = sites.filter(site => {
         if (statusFilter !== 'all' && (site.STATUS || 'active') !== statusFilter) return false;
+        if (personFilter && site.RESPONSIBLE_PERSON_NAME !== personFilter) return false;
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         const otLabel = OT_TYPE_CONFIG[site.OT_TYPE as keyof typeof OT_TYPE_CONFIG]?.label || '';
@@ -142,6 +162,7 @@ const Sites: React.FC = () => {
             site.SITE_TYPE?.toLowerCase().includes(q) ||
             otLabel.toLowerCase().includes(q) ||
             site.SUPERVISOR_NAME?.toLowerCase().includes(q) ||
+            site.RESPONSIBLE_PERSON_NAME?.toLowerCase().includes(q) ||
             site.TASK_TYPES?.some(t => t.TASK_NAME?.toLowerCase().includes(q))
         );
     });
@@ -160,6 +181,7 @@ const Sites: React.FC = () => {
                     <h1 className="text-xl font-bold tracking-tight text-slate-900">Sites &amp; Locations</h1>
                     <p className="text-slate-500 text-sm mt-0.5">
                         {filteredSites.length} of {sites.length} site{sites.length !== 1 ? 's' : ''}
+                        {personFilter && <span className="ml-1.5 font-semibold text-indigo-600">· {personFilter}</span>}
                         {statusFilter !== 'all' && <span className={`ml-1.5 font-semibold ${statusFilter === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>({statusFilter})</span>}
                     </p>
                 </div>
@@ -172,6 +194,25 @@ const Sites: React.FC = () => {
                                 {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
                             </button>
                         ))}
+                    </div>
+                    {/* Responsible Person filter */}
+                    <div className="relative">
+                        <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select
+                            value={personFilter}
+                            onChange={e => setPersonFilter(e.target.value)}
+                            className={`pl-9 pr-8 py-2 border rounded-xl text-sm font-medium transition-all appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-400 ${personFilter ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}
+                        >
+                            <option value="">All Responsible Persons</option>
+                            {responsiblePersons.map(([id, pname]) => (
+                                <option key={id} value={pname}>{pname}</option>
+                            ))}
+                        </select>
+                        {personFilter && (
+                            <button onClick={() => setPersonFilter('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
                     {/* Search bar */}
                     <div className="relative flex-1 sm:flex-none">
@@ -224,6 +265,7 @@ const Sites: React.FC = () => {
                                     <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Site Type</th>
                                     <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">OT Type</th>
                                     <th className="hidden sm:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Supervisor</th>
+                                    <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Responsible</th>
                                     <th className="hidden md:table-cell text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Staff</th>
                                     <th className="hidden lg:table-cell text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Target</th>
                                     <th className="hidden lg:table-cell text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Task Types</th>
@@ -233,7 +275,7 @@ const Sites: React.FC = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {filteredSites.length === 0 && (
                                     <tr>
-                                        <td colSpan={11} className="px-4 py-10 text-center">
+                                        <td colSpan={12} className="px-4 py-10 text-center">
                                             <Search className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                                             <p className="text-sm font-semibold text-slate-400">No sites match &quot;{search}&quot;</p>
                                             <button onClick={() => setSearch('')} className="mt-2 text-xs text-indigo-500 hover:underline">Clear search</button>
@@ -303,6 +345,21 @@ const Sites: React.FC = () => {
                                                         </div>
                                                         <span className="text-xs font-medium text-slate-700">{site.SUPERVISOR_NAME}</span>
                                                     </div>
+                                                ) : <span className="text-slate-300 text-xs">—</span>}
+                                            </td>
+                                            {/* Responsible Person */}
+                                            <td className="hidden md:table-cell px-4 py-3.5 whitespace-nowrap">
+                                                {site.RESPONSIBLE_PERSON_NAME ? (
+                                                    <button
+                                                        onClick={() => setPersonFilter(personFilter === site.RESPONSIBLE_PERSON_NAME ? '' : site.RESPONSIBLE_PERSON_NAME!)}
+                                                        title={`Filter by ${site.RESPONSIBLE_PERSON_NAME}`}
+                                                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors group ${personFilter === site.RESPONSIBLE_PERSON_NAME ? 'bg-indigo-100 ring-1 ring-indigo-300' : 'hover:bg-indigo-50'}`}
+                                                    >
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${personFilter === site.RESPONSIBLE_PERSON_NAME ? 'bg-indigo-200 text-indigo-700' : 'bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100'}`}>
+                                                            {site.RESPONSIBLE_PERSON_NAME.charAt(0)}
+                                                        </div>
+                                                        <span className={`text-xs font-medium ${personFilter === site.RESPONSIBLE_PERSON_NAME ? 'text-indigo-700' : 'text-slate-700 group-hover:text-indigo-700'}`}>{site.RESPONSIBLE_PERSON_NAME}</span>
+                                                    </button>
                                                 ) : <span className="text-slate-300 text-xs">—</span>}
                                             </td>
                                             {/* Staff Count */}
@@ -446,18 +503,31 @@ const Sites: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Supervisor */}
-                                {viewingSite.SUPERVISOR_NAME && (
-                                    <div className="flex items-center gap-3 p-4 bg-violet-50 rounded-xl">
-                                        <div className="w-9 h-9 bg-violet-200 rounded-full flex items-center justify-center text-violet-700 font-bold text-sm shrink-0">
-                                            {viewingSite.SUPERVISOR_NAME.charAt(0)}
+                                {/* Supervisor + Responsible Person */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {viewingSite.SUPERVISOR_NAME && (
+                                        <div className="flex items-center gap-3 p-4 bg-violet-50 rounded-xl">
+                                            <div className="w-9 h-9 bg-violet-200 rounded-full flex items-center justify-center text-violet-700 font-bold text-sm shrink-0">
+                                                {viewingSite.SUPERVISOR_NAME.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-violet-500 font-semibold uppercase tracking-wide">Supervisor</p>
+                                                <p className="font-bold text-slate-800">{viewingSite.SUPERVISOR_NAME}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-xs text-violet-500 font-semibold uppercase tracking-wide">Supervisor</p>
-                                            <p className="font-bold text-slate-800">{viewingSite.SUPERVISOR_NAME}</p>
+                                    )}
+                                    {viewingSite.RESPONSIBLE_PERSON_NAME && (
+                                        <div className="flex items-center gap-3 p-4 bg-indigo-50 rounded-xl">
+                                            <div className="w-9 h-9 bg-indigo-200 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm shrink-0">
+                                                {viewingSite.RESPONSIBLE_PERSON_NAME.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-indigo-500 font-semibold uppercase tracking-wide">Responsible Person</p>
+                                                <p className="font-bold text-slate-800">{viewingSite.RESPONSIBLE_PERSON_NAME}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
 
                                 {/* Task Types table */}
                                 {viewingSite.TASK_TYPES && viewingSite.TASK_TYPES.length > 0 && (
@@ -608,14 +678,30 @@ const Sites: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Supervisor */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Supervisor</label>
-                                    <select value={supervisorId} onChange={e => setSupervisorId(e.target.value ? Number(e.target.value) : '')}
-                                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm">
-                                        <option value="">No Supervisor</option>
-                                        {supervisors.map(s => <option key={s.ID} value={s.ID}>{s.NAME}</option>)}
-                                    </select>
+                                {/* Supervisor + Responsible Person */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2">Supervisor</label>
+                                        <select value={supervisorId} onChange={e => setSupervisorId(e.target.value ? Number(e.target.value) : '')}
+                                            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm">
+                                            <option value="">No Supervisor</option>
+                                            {supervisors.map(s => <option key={s.ID} value={s.ID}>{s.NAME}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                                            <UserCheck className="w-4 h-4 text-indigo-500" /> Responsible Person
+                                        </label>
+                                        <select value={responsiblePersonId} onChange={e => setResponsiblePersonId(e.target.value ? Number(e.target.value) : '')}
+                                            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm">
+                                            <option value="">No Responsible Person</option>
+                                            {allUsers.filter(u =>
+                                                u.STATUS === 'active' && u.ROLE !== 'system_admin'
+                                            ).map(u => (
+                                                <option key={u.ID} value={u.ID}>{u.NAME} ({u.ROLE})</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
 
                                 {/* OT Type */}
