@@ -464,7 +464,7 @@ const ServiceMindmap: React.FC = () => {
                                         <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" paddingAngle={3}>
                                             {donutData.map((d,i) => <Cell key={i} fill={d.color} strokeWidth={0} />)}
                                         </Pie>
-                                        <Tooltip formatter={(v:any, n:string) => [v, n]} contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
+                                        <Tooltip formatter={(v:any, n:string | undefined) => [v, n ?? '']} contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
