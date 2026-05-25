@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
 import { calculateTimeBasedExtra, calculateTimeBasedPayment, calculateTargetBasedExtra, calculateTargetBasedPayment, getDayType } from '../utils/payrollUtils';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { computeWorkingDays } from '../utils/analyticsUtils';
 
 const DEFAULT_OUT_TIME = '17:00';
 const DEFAULT_IN_TIME  = '08:30';
@@ -583,6 +584,197 @@ export const getCustomOTHistory = async (req: Request, res: Response) => {
         res.json(result.rows || []);
     } catch (err) {
         console.error('getCustomOTHistory error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const getExtraUnitsSummary = async (req: Request, res: Response) => {
+    const { date_from, date_to } = req.query;
+    if (!date_from || !date_to) {
+        return res.status(400).json({ message: 'date_from and date_to required' });
+    }
+    const from = String(date_from);
+    const to   = String(date_to);
+    const workingDays = computeWorkingDays(from, to);
+
+    try {
+        // Per-staff task counts for all target-based active sites
+        const staffRes = await execute<any>(
+            `SELECT
+                s.id          AS site_id,
+                s.site_no,
+                s.name        AS site_name,
+                s.daily_target,
+                u.id          AS staff_id,
+                u.name        AS staff_name,
+                u.epf_number,
+                COALESCE(SUM(COALESCE(t.count, 0)), 0) AS sum_count
+             FROM sites s
+             JOIN users u
+               ON u.site_id = s.id
+              AND u.role    = 'staff'
+              AND u.status  = 'active'
+             LEFT JOIN tasks t
+               ON t.staff_id = u.id
+              AND t.site_id  = s.id
+              AND t.ot_type  = 'target_based'
+              AND t.task_date >= :from
+              AND t.task_date <= :to
+             WHERE s.ot_type = 'target_based'
+               AND s.status  = 'active'
+             GROUP BY s.id, s.site_no, s.name, s.daily_target,
+                      u.id, u.name, u.epf_number
+             ORDER BY s.site_no, u.name`,
+            { from, to }
+        );
+
+        // Saved batches for this exact date range
+        const savedRes = await execute<any>(
+            `SELECT
+                site_no,
+                MAX(batch_id)                                      AS batch_id,
+                MAX(TO_CHAR(saved_at, 'YYYY-MM-DD HH24:MI'))       AS saved_at,
+                SUM(extra_payment)                                  AS total_extra_payment,
+                JSON_ARRAYAGG(
+                    JSON_OBJECT(
+                        'id'            VALUE id,
+                        'staff_id'      VALUE staff_id,
+                        'extra_payment' VALUE extra_payment
+                    )
+                )                                                   AS saved_records
+             FROM payroll_saved_records
+             WHERE date_from = :from
+               AND date_to   = :to
+             GROUP BY site_no`,
+            { from, to }
+        );
+
+        // Build saved map: site_no → saved info
+        const savedMap = new Map<string, any>();
+        for (const row of (savedRes.rows || [])) {
+            savedMap.set(String(row.SITE_NO), {
+                batch_id:      row.BATCH_ID,
+                saved_at:      row.SAVED_AT,
+                saved_records: typeof row.SAVED_RECORDS === 'string'
+                                   ? JSON.parse(row.SAVED_RECORDS)
+                                   : (row.SAVED_RECORDS ?? []),
+            });
+        }
+
+        // Group staff rows by site
+        const siteMap = new Map<string, any>();
+        for (const r of (staffRes.rows || [])) {
+            const sno = String(r.SITE_NO);
+            if (!siteMap.has(sno)) {
+                siteMap.set(sno, {
+                    site_id:      Number(r.SITE_ID),
+                    site_no:      sno,
+                    site_name:    r.SITE_NAME,
+                    daily_target: Number(r.DAILY_TARGET) || 0,
+                    working_days: workingDays,
+                    staff: [],
+                });
+            }
+            siteMap.get(sno).staff.push({
+                staff_id:   Number(r.STAFF_ID),
+                staff_name: r.STAFF_NAME,
+                epf_number: r.EPF_NUMBER || '',
+                sum_count:  Number(r.SUM_COUNT),
+            });
+        }
+
+        // Compute per-site and per-staff extra units, merge saved info
+        const result = Array.from(siteMap.values()).map(site => {
+            const savedInfo   = savedMap.get(site.site_no);
+            const savedRecMap = new Map<number, any>(
+                (savedInfo?.saved_records ?? []).map((sr: any) => [Number(sr.staff_id ?? sr.STAFF_ID), sr])
+            );
+
+            const targetPerStaff = site.daily_target * workingDays;
+
+            const staff = site.staff.map((s: any) => {
+                const extraUnits   = Math.max(0, s.sum_count - targetPerStaff);
+                const savedRec     = savedRecMap.get(s.staff_id);
+                const extraPayment = savedRec
+                    ? Number(savedRec.extra_payment ?? savedRec.EXTRA_PAYMENT)
+                    : Math.round(extraUnits * EXTRA_UNIT_RATE * 100) / 100;
+                return {
+                    staff_id:        s.staff_id,
+                    staff_name:      s.staff_name,
+                    epf_number:      s.epf_number,
+                    sum_count:       s.sum_count,
+                    target_count:    targetPerStaff,
+                    extra_units:     extraUnits,
+                    extra_payment:   extraPayment,
+                    saved_record_id: savedRec ? Number(savedRec.id ?? savedRec.ID) : null,
+                };
+            });
+
+            const totalUnits    = staff.reduce((s: number, r: any) => s + r.sum_count, 0);
+            const expectedUnits = site.daily_target * workingDays * site.staff.length;
+            const extraUnits    = staff.reduce((s: number, r: any) => s + r.extra_units, 0);
+            const extraPayment  = staff.reduce((s: number, r: any) => s + r.extra_payment, 0);
+
+            return {
+                site_id:        site.site_id,
+                site_no:        site.site_no,
+                site_name:      site.site_name,
+                daily_target:   site.daily_target,
+                working_days:   workingDays,
+                expected_units: expectedUnits,
+                total_units:    totalUnits,
+                extra_units:    extraUnits,
+                extra_payment:  Math.round(extraPayment * 100) / 100,
+                saved:          !!savedInfo,
+                saved_at:       savedInfo?.saved_at ?? null,
+                batch_id:       savedInfo?.batch_id ?? null,
+                staff,
+            };
+        });
+
+        res.json(result);
+    } catch (err) {
+        console.error('getExtraUnitsSummary error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const deleteSavedBatch = async (req: Request, res: Response) => {
+    const { site_no, date_from, date_to } = req.query;
+    if (!site_no || !date_from || !date_to) {
+        return res.status(400).json({ message: 'site_no, date_from and date_to required' });
+    }
+    try {
+        await execute(
+            `DELETE FROM payroll_saved_records
+             WHERE site_no   = :site_no
+               AND date_from = :date_from
+               AND date_to   = :date_to`,
+            { site_no: String(site_no), date_from: String(date_from), date_to: String(date_to) }
+        );
+        res.json({ message: 'Deleted successfully' });
+    } catch (err) {
+        console.error('deleteSavedBatch error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const updateSavedRecord = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { extra_payment } = req.body;
+    if (extra_payment === undefined || isNaN(Number(extra_payment))) {
+        return res.status(400).json({ message: 'extra_payment must be a number' });
+    }
+    try {
+        await execute(
+            `UPDATE payroll_saved_records
+             SET extra_payment = :extra_payment
+             WHERE id = :id`,
+            { id: Number(id), extra_payment: Number(extra_payment) }
+        );
+        res.json({ message: 'Updated successfully' });
+    } catch (err) {
+        console.error('updateSavedRecord error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 };
