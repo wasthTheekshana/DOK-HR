@@ -192,7 +192,7 @@ const Invoices: React.FC = () => {
                 salary_ot_amount: adjustedSalaryOT,
                 invoice_price:    isOutsource ? outsourceInvoiceTotal : preview.total_invoice_price,
             });
-            setIsModalOpen(false); fetchInvoices();
+            setIsModalOpen(false); fetchInvoices(filterActive ? filterFrom : undefined, filterActive ? filterTo : undefined);
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to save invoice'); }
         finally { setSaving(false); }
     };
@@ -218,7 +218,7 @@ const Invoices: React.FC = () => {
                 expense_cost:        Number(editFields.expense_cost)        || 0,
                 invoice_price:       Number(editFields.invoice_price)       || 0,
             });
-            setEditingInvoice(null); fetchInvoices();
+            setEditingInvoice(null); fetchInvoices(filterActive ? filterFrom : undefined, filterActive ? filterTo : undefined);
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to update'); }
         finally { setEditSaving(false); }
     };
@@ -226,7 +226,7 @@ const Invoices: React.FC = () => {
     // ── Delete handler ──
     const handleDelete = async (id: number) => {
         if (!confirm('Delete this invoice record? This cannot be undone.')) return;
-        try { await api.delete(`/invoices/${id}`); fetchInvoices(); }
+        try { await api.delete(`/invoices/${id}`); fetchInvoices(filterActive ? filterFrom : undefined, filterActive ? filterTo : undefined); }
         catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
     };
 
