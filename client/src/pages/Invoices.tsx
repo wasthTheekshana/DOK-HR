@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import api from '../services/api';
 import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor, InvoiceOutsourceStaffLine } from '../types';
 import jsPDF from 'jspdf';
@@ -7,7 +8,7 @@ import * as XLSX from 'xlsx';
 import {
     FileText, Plus, Trash2, X, Calculator, ChevronRight,
     Building2, Calendar, DollarSign, Users, Package, TrendingUp, Save,
-    Pencil, FileDown, FileSpreadsheet, Loader2,
+    Pencil, FileDown, FileSpreadsheet, Loader2, Search,
 } from 'lucide-react';
 
 const fmt  = (n: number) => `Rs. ${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -52,16 +53,76 @@ const Invoices: React.FC = () => {
     // ── Report loading ──
     const [reportLoading, setReportLoading] = useState<{ id: number; type: 'pdf' | 'excel' } | null>(null);
 
+    // ── Bulk generate modal ──
+    const [bulkModalOpen, setBulkModalOpen] = useState(false);
+    const [bulkFrom,      setBulkFrom]      = useState('');
+    const [bulkTo,        setBulkTo]        = useState('');
+    const [bulkLoading,   setBulkLoading]   = useState(false);
+
+    // ── Invoice list date filter ──
+    const [filterFrom,   setFilterFrom]   = useState('');
+    const [filterTo,     setFilterTo]     = useState('');
+    const [filterActive, setFilterActive] = useState(false);
+
     useEffect(() => { fetchInvoices(); fetchSites(); }, []);
 
-    const fetchInvoices = async () => {
-        try { const r = await api.get('/invoices'); setInvoices(r.data); }
-        catch (e) { console.error(e); }
-        finally { setLoading(false); }
+    const fetchInvoices = async (dateFrom?: string, dateTo?: string) => {
+        try {
+            const params: Record<string, string> = {};
+            if (dateFrom && dateTo) {
+                params.date_from = dateFrom;
+                params.date_to   = dateTo;
+            }
+            const res = await api.get<InvoiceRecord[]>('/invoices', { params });
+            setInvoices(res.data);
+        } catch (err) {
+            console.error('fetchInvoices error:', err);
+        } finally {
+            setLoading(false);
+        }
     };
     const fetchSites = async () => {
         try { const r = await api.get('/sites'); setSites(r.data); }
         catch (e) { console.error(e); }
+    };
+
+    const handleFilterSearch = () => {
+        if (!filterFrom || !filterTo) return;
+        setFilterActive(true);
+        fetchInvoices(filterFrom, filterTo);
+    };
+
+    const handleFilterClear = () => {
+        setFilterFrom('');
+        setFilterTo('');
+        setFilterActive(false);
+        fetchInvoices();
+    };
+
+    const handleBulkGenerate = async () => {
+        if (!bulkFrom || !bulkTo) return;
+        setBulkLoading(true);
+        try {
+            const res = await api.post<{ generated: number; skipped: string[] }>(
+                '/invoices/bulk-generate',
+                { date_from: bulkFrom, date_to: bulkTo }
+            );
+            const { generated, skipped } = res.data;
+            if (generated === 0 && skipped.length > 0) {
+                toast('0 generated — all sites already have invoices for this period.', { icon: 'ℹ️' });
+            } else if (skipped.length > 0) {
+                toast.success(`${generated} invoice${generated !== 1 ? 's' : ''} generated. ${skipped.length} skipped (already exist): ${skipped.join(', ')}`);
+            } else {
+                toast.success(`${generated} invoice${generated !== 1 ? 's' : ''} generated.`);
+            }
+            setBulkModalOpen(false);
+            fetchInvoices(filterActive ? filterFrom : undefined, filterActive ? filterTo : undefined);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            toast.error(e.response?.data?.message ?? 'Bulk generation failed');
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
     // ── Generate modal handlers ──
@@ -398,10 +459,22 @@ const Invoices: React.FC = () => {
                     <h1 className="text-xl font-bold tracking-tight text-slate-900">Invoices</h1>
                     <p className="text-slate-500 text-sm mt-0.5">Site-wise monthly cost &amp; invoice records</p>
                 </div>
-                <button onClick={openModal}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
-                    <Plus className="w-4 h-4" /> Generate Invoice
-                </button>
+                <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => {
+                        const today = new Date().toISOString().slice(0, 10);
+                        const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+                        setBulkFrom(firstOfMonth);
+                        setBulkTo(today);
+                        setBulkModalOpen(true);
+                    }}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
+                        <TrendingUp className="w-4 h-4" /> Generate All Sites
+                    </button>
+                    <button type="button" onClick={openModal}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
+                        <Plus className="w-4 h-4" /> Generate Invoice
+                    </button>
+                </div>
             </div>
 
             {/* Summary cards */}
@@ -417,6 +490,40 @@ const Invoices: React.FC = () => {
                         <p className={`text-lg font-black ${c.color} truncate`}>{c.value}</p>
                     </div>
                 ))}
+            </div>
+
+            {/* Date filter bar */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <div className="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label className="form-label">From</label>
+                        <input type="date" value={filterFrom}
+                            onChange={e => setFilterFrom(e.target.value)}
+                            className="form-input" />
+                    </div>
+                    <div>
+                        <label className="form-label">To</label>
+                        <input type="date" value={filterTo}
+                            onChange={e => setFilterTo(e.target.value)}
+                            className="form-input" />
+                    </div>
+                    <button type="button" onClick={handleFilterSearch}
+                        disabled={!filterFrom || !filterTo}
+                        className="btn btn-primary flex items-center gap-2">
+                        <Search className="w-4 h-4" /> Search
+                    </button>
+                    {filterActive && (
+                        <button type="button" onClick={handleFilterClear}
+                            className="btn btn-ghost flex items-center gap-2 text-slate-500">
+                            <X className="w-4 h-4" /> Clear
+                        </button>
+                    )}
+                    {filterActive && (
+                        <span className="text-xs text-indigo-600 font-semibold bg-indigo-50 px-2.5 py-1 rounded-full">
+                            Filtered: {filterFrom} → {filterTo}
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Invoices Table */}
@@ -931,6 +1038,65 @@ const Invoices: React.FC = () => {
                                     </div>
                                 </>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Generate Modal */}
+            {bulkModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={() => !bulkLoading && setBulkModalOpen(false)} />
+                    <div className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+                        onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-emerald-600" />
+                                <h2 className="text-[15px] font-bold text-slate-900">Generate All Sites</h2>
+                            </div>
+                            <button type="button" onClick={() => setBulkModalOpen(false)} disabled={bulkLoading}
+                                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="px-5 py-4 space-y-4">
+                            <p className="text-[13px] text-slate-500">
+                                Generates invoices for all active sites using calculated defaults. Sites that already have an invoice for this date range are skipped.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="form-label">Date From</label>
+                                    <input type="date" value={bulkFrom}
+                                        onChange={e => setBulkFrom(e.target.value)}
+                                        className="form-input" />
+                                </div>
+                                <div>
+                                    <label className="form-label">Date To</label>
+                                    <input type="date" value={bulkTo}
+                                        onChange={e => setBulkTo(e.target.value)}
+                                        className="form-input" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2">
+                            <button type="button" onClick={() => setBulkModalOpen(false)} disabled={bulkLoading}
+                                className="btn btn-ghost">
+                                Cancel
+                            </button>
+                            <button type="button" onClick={handleBulkGenerate}
+                                disabled={bulkLoading || !bulkFrom || !bulkTo}
+                                className="btn btn-primary flex items-center gap-2">
+                                {bulkLoading
+                                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+                                    : <><TrendingUp className="w-4 h-4" /> Generate</>
+                                }
+                            </button>
                         </div>
                     </div>
                 </div>
