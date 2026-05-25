@@ -83,6 +83,7 @@ const Invoices: React.FC = () => {
             setInvoices(res.data);
         } catch (err) {
             console.error('fetchInvoices error:', err);
+            toast.error('Failed to load invoices. Please try again.');
         } finally {
             setLoading(false);
             setRefreshing(false);
