@@ -19,6 +19,7 @@ import Invoices from './pages/Invoices';
 import TaskSummary from './pages/TaskSummary';
 import InvoiceAnalysis from './pages/InvoiceAnalysis';
 import ServiceMindmap from './pages/ServiceMindmap';
+import ExtraUnits from './pages/ExtraUnits';
 
 const LoadingScreen = () => (
   <div className="flex items-center justify-center h-screen">
@@ -69,6 +70,7 @@ function App() {
             <Route path="task-summary" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TaskSummary /></RoleProtectedRoute>} />
             <Route path="invoice-analysis" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><InvoiceAnalysis /></RoleProtectedRoute>} />
             <Route path="service-mindmap" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ServiceMindmap /></RoleProtectedRoute>} />
+            <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
           </Route>
         </Routes>
       </AuthProvider>

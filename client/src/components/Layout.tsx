@@ -32,6 +32,7 @@ const NAV_GROUPS = [
         label: 'Finance',
         items: [
             { to: '/payroll',        label: 'Payroll',         icon: DollarSign,      roles: ['admin','system_admin'] },
+            { to: '/extra-units',    label: 'Extra Units',     icon: TrendingUp,      roles: ['admin','system_admin'] },
             { to: '/invoices',          label: 'Invoices',          icon: FileText,   roles: ['admin','system_admin'] },
             { to: '/invoice-analysis', label: 'Invoice Analysis',  icon: PieChart,   roles: ['system_admin'] },
             { to: '/reports',          label: 'Reports',            icon: BarChart3,  roles: ['admin'] },
