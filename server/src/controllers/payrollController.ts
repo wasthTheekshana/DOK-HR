@@ -635,11 +635,11 @@ export const getExtraUnitsSummary = async (req: Request, res: Response) => {
                 MAX(batch_id)                                      AS batch_id,
                 MAX(TO_CHAR(saved_at, 'YYYY-MM-DD HH24:MI'))       AS saved_at,
                 SUM(extra_payment)                                  AS total_extra_payment,
-                JSON_ARRAYAGG(
-                    JSON_OBJECT(
-                        'id'            VALUE id,
-                        'staff_id'      VALUE staff_id,
-                        'extra_payment' VALUE extra_payment
+                json_agg(
+                    json_build_object(
+                        'id',            id,
+                        'staff_id',      staff_id,
+                        'extra_payment', extra_payment
                     )
                 )                                                   AS saved_records
              FROM payroll_saved_records
@@ -687,7 +687,7 @@ export const getExtraUnitsSummary = async (req: Request, res: Response) => {
         const result = Array.from(siteMap.values()).map(site => {
             const savedInfo   = savedMap.get(site.site_no);
             const savedRecMap = new Map<number, any>(
-                (savedInfo?.saved_records ?? []).map((sr: any) => [Number(sr.staff_id ?? sr.STAFF_ID), sr])
+                (savedInfo?.saved_records ?? []).map((sr: any) => [Number(sr.staff_id), sr])
             );
 
             const targetPerStaff = site.daily_target * workingDays;
@@ -696,7 +696,7 @@ export const getExtraUnitsSummary = async (req: Request, res: Response) => {
                 const extraUnits   = Math.max(0, s.sum_count - targetPerStaff);
                 const savedRec     = savedRecMap.get(s.staff_id);
                 const extraPayment = savedRec
-                    ? Number(savedRec.extra_payment ?? savedRec.EXTRA_PAYMENT)
+                    ? Number(savedRec.extra_payment)
                     : Math.round(extraUnits * EXTRA_UNIT_RATE * 100) / 100;
                 return {
                     staff_id:        s.staff_id,
@@ -706,7 +706,7 @@ export const getExtraUnitsSummary = async (req: Request, res: Response) => {
                     target_count:    targetPerStaff,
                     extra_units:     extraUnits,
                     extra_payment:   extraPayment,
-                    saved_record_id: savedRec ? Number(savedRec.id ?? savedRec.ID) : null,
+                    saved_record_id: savedRec ? Number(savedRec.id) : null,
                 };
             });
 
@@ -761,6 +761,9 @@ export const deleteSavedBatch = async (req: Request, res: Response) => {
 
 export const updateSavedRecord = async (req: Request, res: Response) => {
     const { id } = req.params;
+    if (!id || isNaN(Number(id))) {
+        return res.status(400).json({ message: 'id must be a valid number' });
+    }
     const { extra_payment } = req.body;
     if (extra_payment === undefined || isNaN(Number(extra_payment))) {
         return res.status(400).json({ message: 'extra_payment must be a number' });
