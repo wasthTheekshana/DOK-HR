@@ -59,7 +59,7 @@ const ExtraUnits: React.FC = () => {
     const [editVals,  setEditVals]  = useState<Record<string, Record<number, number>>>({});
 
     /* ── Load ── */
-    const handleLoad = async () => {
+    const handleLoad = async (preserveSite?: string) => {
         setLoading(true);
         setLoaded(false);
         try {
@@ -67,13 +67,13 @@ const ExtraUnits: React.FC = () => {
                 params: { date_from: dateFrom, date_to: dateTo },
             });
             setRows(res.data);
-            setExpanded(new Set());
+            setExpanded(preserveSite ? new Set([preserveSite]) : new Set());
             setEditing(new Set());
             setEditVals({});
             setLoaded(true);
         } catch (err: unknown) {
-            const error = err as { response?: { data?: { message?: string } } };
-            toast.error(error.response?.data?.message ?? 'Failed to load extra units');
+            const e = err as { response?: { data?: { message?: string } } };
+            toast.error(e.response?.data?.message ?? 'Failed to load extra units');
         } finally {
             setLoading(false);
         }
@@ -118,7 +118,7 @@ const ExtraUnits: React.FC = () => {
             });
 
             toast.success(`Saved ${records.length} records for ${row.site_name}`);
-            await handleLoad();
+            await handleLoad(row.site_no);
         } catch (err: unknown) {
             const error = err as { response?: { data?: { message?: string } } };
             toast.error(error.response?.data?.message ?? 'Save failed');
@@ -139,11 +139,18 @@ const ExtraUnits: React.FC = () => {
     /* ── Update (save edits) ── */
     const handleUpdate = async (row: SiteRow) => {
         const vals = editVals[row.site_no] ?? {};
+        const changed = row.staff.filter(
+            s => s.saved_record_id !== null && vals[s.staff_id] !== s.extra_payment
+        );
+
+        if (changed.length === 0) {
+            toast('No changes to save', { icon: 'ℹ️' });
+            setEditing(prev => { const next = new Set(prev); next.delete(row.site_no); return next; });
+            return;
+        }
+
         setSaving(prev => new Set(prev).add(row.site_no));
         try {
-            const changed = row.staff.filter(
-                s => s.saved_record_id !== null && vals[s.staff_id] !== s.extra_payment
-            );
             await Promise.all(
                 changed.map(s =>
                     api.put(`/payroll/saved-record/${s.saved_record_id}`, {
@@ -153,7 +160,7 @@ const ExtraUnits: React.FC = () => {
             );
             toast.success(`Updated ${row.site_name}`);
             setEditing(prev => { const next = new Set(prev); next.delete(row.site_no); return next; });
-            await handleLoad();
+            await handleLoad(row.site_no);
         } catch (err: unknown) {
             const error = err as { response?: { data?: { message?: string } } };
             toast.error(error.response?.data?.message ?? 'Update failed');
@@ -398,7 +405,7 @@ const ExtraUnits: React.FC = () => {
                                                     s.extra_units > 0 ? 'text-emerald-600' : 'text-slate-400'
                                                 )}>{s.extra_units.toLocaleString()}</td>
                                                 <td className="px-5 py-2.5 text-right">
-                                                    {isEditing ? (
+                                                    {isEditing && s.saved_record_id !== null ? (
                                                         <input
                                                             type="number"
                                                             min={0}
