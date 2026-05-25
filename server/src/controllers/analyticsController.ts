@@ -788,6 +788,13 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
         const { date_from, date_to } = req.query;
         const hasFilter = date_from && date_to;
 
+        const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+        if (date_from || date_to) {
+            if (!DATE_RE.test(String(date_from)) || !DATE_RE.test(String(date_to))) {
+                return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
+            }
+        }
+
         const now = new Date();
         const df = hasFilter ? String(date_from) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
         const dt = hasFilter ? String(date_to)   : now.toISOString().slice(0, 10);

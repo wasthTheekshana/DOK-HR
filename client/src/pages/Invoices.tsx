@@ -30,6 +30,7 @@ const Invoices: React.FC = () => {
     const [invoices, setInvoices]     = useState<InvoiceRecord[]>([]);
     const [sites, setSites]           = useState<Site[]>([]);
     const [loading, setLoading]       = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     // ── Generate modal ──
     const [isModalOpen, setIsModalOpen]     = useState(false);
@@ -67,6 +68,11 @@ const Invoices: React.FC = () => {
     useEffect(() => { fetchInvoices(); fetchSites(); }, []);
 
     const fetchInvoices = async (dateFrom?: string, dateTo?: string) => {
+        if (invoices.length === 0) {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
         try {
             const params: Record<string, string> = {};
             if (dateFrom && dateTo) {
@@ -79,6 +85,7 @@ const Invoices: React.FC = () => {
             console.error('fetchInvoices error:', err);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
     const fetchSites = async () => {
@@ -101,6 +108,10 @@ const Invoices: React.FC = () => {
 
     const handleBulkGenerate = async () => {
         if (!bulkFrom || !bulkTo) return;
+        if (bulkFrom > bulkTo) {
+            toast.error('Start date must not be after end date');
+            return;
+        }
         setBulkLoading(true);
         try {
             const res = await api.post<{ generated: number; skipped: string[] }>(
@@ -108,13 +119,16 @@ const Invoices: React.FC = () => {
                 { date_from: bulkFrom, date_to: bulkTo }
             );
             const { generated, skipped } = res.data;
-            if (generated === 0 && skipped.length > 0) {
-                toast('0 generated — all sites already have invoices for this period.', { icon: 'ℹ️' });
-            } else if (skipped.length > 0) {
-                toast.success(`${generated} invoice${generated !== 1 ? 's' : ''} generated. ${skipped.length} skipped (already exist): ${skipped.join(', ')}`);
-            } else {
-                toast.success(`${generated} invoice${generated !== 1 ? 's' : ''} generated.`);
-            }
+            const alreadyExist = (skipped as string[]).filter(s => !s.endsWith('(error)'));
+            const errored = (skipped as string[]).filter(s => s.endsWith('(error)'));
+
+            const parts: string[] = [];
+            if (generated > 0) parts.push(`${generated} invoice${generated === 1 ? '' : 's'} generated.`);
+            if (alreadyExist.length > 0) parts.push(`${alreadyExist.length} skipped (already exist): ${alreadyExist.join(', ')}`);
+            if (errored.length > 0) parts.push(`${errored.length} failed: ${errored.join(', ')}`);
+            if (parts.length === 0) parts.push('0 generated — all sites already have invoices for this period.');
+
+            toast.success(parts.join(' '));
             setBulkModalOpen(false);
             fetchInvoices(filterActive ? filterFrom : undefined, filterActive ? filterTo : undefined);
         } catch (err: unknown) {
@@ -456,7 +470,10 @@ const Invoices: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900">Invoices</h1>
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900">
+                        Invoices
+                        {refreshing && <Loader2 className="animate-spin h-4 w-4 inline ml-2 text-gray-400" />}
+                    </h1>
                     <p className="text-slate-500 text-sm mt-0.5">Site-wise monthly cost &amp; invoice records</p>
                 </div>
                 <div className="flex items-center gap-2">
