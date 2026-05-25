@@ -25,6 +25,7 @@ type DatePreset = 'this_month' | 'last_month' | 'custom';
 const InvoiceAnalysis: React.FC = () => {
     const [ia, setIa]             = useState<any>(null);
     const [loading, setLoading]   = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [trendMode, setTrendMode] = useState<TrendMode>('monthly');
     const [tab, setTab]           = useState<DetailTab>('all');
     const [search, setSearch]     = useState('');
@@ -33,12 +34,12 @@ const InvoiceAnalysis: React.FC = () => {
     const [customTo,   setCustomTo]   = useState('');
 
     const fetchData = (df: string, dt: string) => {
-        setLoading(true);
-        setIa(null);
+        if (ia === null) setLoading(true);
+        else setRefreshing(true);
         api.get('/analytics/invoice-analysis', { params: { date_from: df, date_to: dt } })
             .then(r => setIa(r.data))
             .catch(e => console.error('invoice-analysis error', e))
-            .finally(() => setLoading(false));
+            .finally(() => { setLoading(false); setRefreshing(false); });
     };
 
     useEffect(() => {
@@ -157,6 +158,8 @@ const InvoiceAnalysis: React.FC = () => {
                             </button>
                         ))}
                     </div>
+
+                    {refreshing && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
 
                     {datePreset === 'custom' && (
                         <>
