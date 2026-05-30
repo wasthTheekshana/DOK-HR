@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import * as XLSX from 'xlsx';
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import {
-    DollarSign, FileDown, Search, X
+    DollarSign, FileDown, Search, X, Loader2,
 } from 'lucide-react';
 import {
     ResponsiveContainer,
@@ -19,20 +20,47 @@ const OT_LABEL: Record<string, string> = {
 
 type DetailTab = 'top_revenue' | 'top_profit' | 'loss' | 'all';
 type TrendMode  = 'monthly' | 'quarterly';
+type DatePreset = 'this_month' | 'last_month' | 'custom';
 
 const InvoiceAnalysis: React.FC = () => {
     const [ia, setIa]             = useState<any>(null);
     const [loading, setLoading]   = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [trendMode, setTrendMode] = useState<TrendMode>('monthly');
     const [tab, setTab]           = useState<DetailTab>('all');
     const [search, setSearch]     = useState('');
+    const [datePreset, setDatePreset] = useState<DatePreset>('this_month');
+    const [customFrom, setCustomFrom] = useState('');
+    const [customTo,   setCustomTo]   = useState('');
 
-    useEffect(() => {
-        api.get('/analytics/invoice-analysis')
+    const fetchData = (df: string, dt: string) => {
+        if (ia === null) setLoading(true);
+        else setRefreshing(true);
+        api.get('/analytics/invoice-analysis', { params: { date_from: df, date_to: dt } })
             .then(r => setIa(r.data))
             .catch(e => console.error('invoice-analysis error', e))
-            .finally(() => setLoading(false));
+            .finally(() => { setLoading(false); setRefreshing(false); });
+    };
+
+    useEffect(() => {
+        const now = new Date();
+        fetchData(
+            format(startOfMonth(now), 'yyyy-MM-dd'),
+            format(now, 'yyyy-MM-dd')
+        );
     }, []);
+
+    const handlePresetChange = (preset: DatePreset) => {
+        setDatePreset(preset);
+        if (preset === 'this_month') {
+            const now = new Date();
+            fetchData(format(startOfMonth(now), 'yyyy-MM-dd'), format(now, 'yyyy-MM-dd'));
+        } else if (preset === 'last_month') {
+            const last = subMonths(new Date(), 1);
+            fetchData(format(startOfMonth(last), 'yyyy-MM-dd'), format(endOfMonth(last), 'yyyy-MM-dd'));
+        }
+        // 'custom' — waits for the Load button
+    };
 
     const sm    = ia?.summary || {};
     const trend = trendMode === 'monthly' ? (ia?.monthlyTrend || []) : (ia?.quarterlyTrend || []);
@@ -107,6 +135,58 @@ const InvoiceAnalysis: React.FC = () => {
                 <div>
                     <h2 className="text-lg font-bold text-slate-900">Invoice Business Model Analysis</h2>
                     <p className="text-xs text-slate-500">Comprehensive revenue, cost, and profitability insights from all saved invoices</p>
+                </div>
+            </div>
+
+            {/* Date preset tabs */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex gap-1.5">
+                        {([
+                            { id: 'this_month' as const, label: 'This Month'   },
+                            { id: 'last_month' as const, label: 'Last Month'   },
+                            { id: 'custom'     as const, label: 'Custom Range' },
+                        ]).map(p => (
+                            <button key={p.id} type="button"
+                                onClick={() => handlePresetChange(p.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                    datePreset === p.id
+                                        ? 'bg-green-700 text-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}>
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {refreshing && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+
+                    {datePreset === 'custom' && (
+                        <>
+                            <div>
+                                <label className="form-label">From</label>
+                                <input type="date" value={customFrom}
+                                    onChange={e => setCustomFrom(e.target.value)}
+                                    className="form-input" />
+                            </div>
+                            <div>
+                                <label className="form-label">To</label>
+                                <input type="date" value={customTo}
+                                    onChange={e => setCustomTo(e.target.value)}
+                                    className="form-input" />
+                            </div>
+                            <button type="button"
+                                disabled={!customFrom || !customTo || loading}
+                                onClick={() => fetchData(customFrom, customTo)}
+                                className="btn btn-primary flex items-center gap-2">
+                                {loading
+                                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    : <Search className="w-4 h-4" />
+                                }
+                                Load
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 

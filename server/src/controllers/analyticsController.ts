@@ -785,6 +785,24 @@ export const getSiteProfitability = async (req: Request, res: Response) => {
 
 export const getInvoiceAnalysis = async (req: Request, res: Response) => {
     try {
+        const { date_from, date_to } = req.query;
+        const hasFilter = date_from && date_to;
+
+        const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+        if (date_from || date_to) {
+            if (!date_from || !date_to || !DATE_RE.test(String(date_from)) || !DATE_RE.test(String(date_to))) {
+                return res.status(400).json({ message: 'Provide both date_from and date_to in YYYY-MM-DD format.' });
+            }
+        }
+
+        const now = new Date();
+        const df = hasFilter ? String(date_from) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const dt = hasFilter ? String(date_to)   : now.toISOString().slice(0, 10);
+
+        const filterWhere   = `WHERE date_from >= :df AND date_to <= :dt`;
+        const filterWherePA = `WHERE pa.date_from >= :df AND pa.date_to <= :dt`;
+        const filterParams  = { df, dt };
+
         const [summaryRes, monthlyRes, siteRes, quarterlyRes] = await Promise.all([
 
             execute<any>(
@@ -798,8 +816,9 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
                     COALESCE(SUM(expense_cost),        0)                                           AS total_expense,
                     COUNT(DISTINCT site_id)                                                         AS site_count
-                 FROM profit_amount`,
-                {}
+                 FROM profit_amount
+                 ${filterWhere}`,
+                filterParams
             ),
 
             execute<any>(
@@ -813,9 +832,10 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     COALESCE(SUM(salary_ot_amount),    0)                                           AS total_salary_ot,
                     COALESCE(SUM(expense_cost),        0)                                           AS total_expense
                  FROM profit_amount
+                 ${filterWhere}
                  GROUP BY TO_CHAR(date_to, 'YYYY-MM')
                  ORDER BY month`,
-                {}
+                filterParams
             ),
 
             execute<any>(
@@ -836,9 +856,10 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     MAX(TO_CHAR(pa.date_to,   'YYYY-MM-DD'))                                        AS last_invoice_date
                  FROM profit_amount pa
                  LEFT JOIN sites s ON s.id = pa.site_id
+                 ${filterWherePA}
                  GROUP BY pa.site_no, pa.site_name, s.service_type, s.site_type, s.ot_type
                  ORDER BY total_revenue DESC`,
-                {}
+                filterParams
             ),
 
             execute<any>(
@@ -849,52 +870,53 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                     COALESCE(SUM(cost_variant_amount + salary_ot_amount + expense_cost), 0) AS total_cost,
                     COALESCE(SUM(invoice_price - cost_variant_amount - salary_ot_amount - expense_cost), 0) AS net_profit
                  FROM profit_amount
+                 ${filterWhere}
                  GROUP BY TO_CHAR(date_to, 'YYYY') || '-Q' || TO_CHAR(date_to, 'Q')
                  ORDER BY quarter`,
-                {}
+                filterParams
             ),
         ]);
 
         const s = summaryRes.rows?.[0] || {};
-        const totalRevenue = Number(s.TOTAL_REVENUE  || 0);
-        const totalCost    = Number(s.TOTAL_COST     || 0);
-        const netProfit    = Number(s.NET_PROFIT     || 0);
-        const cvTotal      = Number(s.TOTAL_COST_VARIANT || 0);
-        const soTotal      = Number(s.TOTAL_SALARY_OT    || 0);
-        const expTotal     = Number(s.TOTAL_EXPENSE      || 0);
+        const totalRevenue = Number(s.TOTAL_REVENUE       || 0);
+        const totalCost    = Number(s.TOTAL_COST          || 0);
+        const netProfit    = Number(s.NET_PROFIT          || 0);
+        const cvTotal      = Number(s.TOTAL_COST_VARIANT  || 0);
+        const soTotal      = Number(s.TOTAL_SALARY_OT     || 0);
+        const expTotal     = Number(s.TOTAL_EXPENSE       || 0);
 
         const sites = (siteRes.rows || []).map((r: any) => {
             const rev    = Number(r.TOTAL_REVENUE || 0);
             const cost   = Number(r.TOTAL_COST    || 0);
             const profit = Number(r.NET_PROFIT    || 0);
             return {
-                site_no:        r.SITE_NO,
-                site_name:      r.SITE_NAME,
-                service_type:   r.SERVICE_TYPE || 'Unset',
-                site_type:      r.SITE_TYPE    || 'Unset',
-                ot_type:        r.OT_TYPE      || 'time_based',
-                invoice_count:  Number(r.INVOICE_COUNT  || 0),
-                total_revenue:  rev,
-                total_cost:     cost,
-                net_profit:     profit,
-                cost_variant:   Number(r.TOTAL_COST_VARIANT || 0),
-                salary_ot:      Number(r.TOTAL_SALARY_OT    || 0),
-                expense:        Number(r.TOTAL_EXPENSE      || 0),
-                profit_margin:  rev > 0 ? Math.round((profit / rev) * 1000) / 10 : 0,
-                first_invoice:  r.FIRST_INVOICE_DATE,
-                last_invoice:   r.LAST_INVOICE_DATE,
+                site_no:       r.SITE_NO,
+                site_name:     r.SITE_NAME,
+                service_type:  r.SERVICE_TYPE || 'Unset',
+                site_type:     r.SITE_TYPE    || 'Unset',
+                ot_type:       r.OT_TYPE      || 'time_based',
+                invoice_count: Number(r.INVOICE_COUNT       || 0),
+                total_revenue: rev,
+                total_cost:    cost,
+                net_profit:    profit,
+                cost_variant:  Number(r.TOTAL_COST_VARIANT  || 0),
+                salary_ot:     Number(r.TOTAL_SALARY_OT     || 0),
+                expense:       Number(r.TOTAL_EXPENSE       || 0),
+                profit_margin: rev > 0 ? Math.round((profit / rev) * 1000) / 10 : 0,
+                first_invoice: r.FIRST_INVOICE_DATE,
+                last_invoice:  r.LAST_INVOICE_DATE,
             };
         });
 
         res.json({
             summary: {
-                total_invoices:    Number(s.TOTAL_INVOICES    || 0),
-                total_revenue:     totalRevenue,
-                total_cost:        totalCost,
-                net_profit:        netProfit,
-                avg_invoice_value: Number(s.AVG_INVOICE_VALUE || 0),
-                profit_margin:     totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 1000) / 10 : 0,
-                site_count:        Number(s.SITE_COUNT        || 0),
+                total_invoices:     Number(s.TOTAL_INVOICES    || 0),
+                total_revenue:      totalRevenue,
+                total_cost:         totalCost,
+                net_profit:         netProfit,
+                avg_invoice_value:  Number(s.AVG_INVOICE_VALUE || 0),
+                profit_margin:      totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 1000) / 10 : 0,
+                site_count:         Number(s.SITE_COUNT        || 0),
                 total_cost_variant: cvTotal,
                 total_salary_ot:    soTotal,
                 total_expense:      expTotal,
@@ -902,20 +924,21 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
                 loss_sites:         sites.filter(x => x.net_profit < 0).length,
             },
             costStructure: [
-                { name: 'Cost Variants',  value: cvTotal,      pct: totalRevenue > 0 ? Math.round((cvTotal    / totalRevenue) * 1000) / 10 : 0, fill: '#f59e0b' },
-                { name: 'Salary + OT',    value: soTotal,      pct: totalRevenue > 0 ? Math.round((soTotal    / totalRevenue) * 1000) / 10 : 0, fill: '#8b5cf6' },
-                { name: 'Expense',        value: expTotal,     pct: totalRevenue > 0 ? Math.round((expTotal   / totalRevenue) * 1000) / 10 : 0, fill: '#64748b' },
-                { name: 'Net Profit',     value: netProfit > 0 ? netProfit : 0, pct: totalRevenue > 0 ? Math.round((Math.max(netProfit, 0) / totalRevenue) * 1000) / 10 : 0, fill: '#10b981' },
+                { name: 'Cost Variants', value: cvTotal,  pct: totalRevenue > 0 ? Math.round((cvTotal  / totalRevenue) * 1000) / 10 : 0, fill: '#f59e0b' },
+                { name: 'Salary + OT',   value: soTotal,  pct: totalRevenue > 0 ? Math.round((soTotal  / totalRevenue) * 1000) / 10 : 0, fill: '#8b5cf6' },
+                { name: 'Expense',       value: expTotal, pct: totalRevenue > 0 ? Math.round((expTotal / totalRevenue) * 1000) / 10 : 0, fill: '#64748b' },
+                { name: 'Net Profit',    value: netProfit > 0 ? netProfit : 0,
+                  pct: totalRevenue > 0 ? Math.round((Math.max(netProfit, 0) / totalRevenue) * 1000) / 10 : 0, fill: '#10b981' },
             ],
             monthlyTrend: (monthlyRes.rows || []).map((r: any) => ({
-                month:          r.MONTH,
-                invoice_count:  Number(r.INVOICE_COUNT  || 0),
-                total_revenue:  Number(r.TOTAL_REVENUE  || 0),
-                total_cost:     Number(r.TOTAL_COST     || 0),
-                net_profit:     Number(r.NET_PROFIT     || 0),
-                cost_variant:   Number(r.TOTAL_COST_VARIANT || 0),
-                salary_ot:      Number(r.TOTAL_SALARY_OT    || 0),
-                expense:        Number(r.TOTAL_EXPENSE      || 0),
+                month:         r.MONTH,
+                invoice_count: Number(r.INVOICE_COUNT       || 0),
+                total_revenue: Number(r.TOTAL_REVENUE       || 0),
+                total_cost:    Number(r.TOTAL_COST          || 0),
+                net_profit:    Number(r.NET_PROFIT          || 0),
+                cost_variant:  Number(r.TOTAL_COST_VARIANT  || 0),
+                salary_ot:     Number(r.TOTAL_SALARY_OT     || 0),
+                expense:       Number(r.TOTAL_EXPENSE       || 0),
             })),
             quarterlyTrend: (quarterlyRes.rows || []).map((r: any) => ({
                 quarter:       r.QUARTER,
