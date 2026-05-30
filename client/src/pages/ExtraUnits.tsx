@@ -224,7 +224,7 @@ const ExtraUnits: React.FC = () => {
                             onChange={e => setDateTo(e.target.value)}
                             className="form-input" />
                     </div>
-                    <button onClick={handleLoad} disabled={loading}
+                    <button onClick={() => handleLoad()} disabled={loading}
                         className="btn btn-primary flex items-center gap-2">
                         {loading
                             ? <Loader2 className="w-4 h-4 animate-spin" />
