@@ -1,6 +1,6 @@
 export type DayType = 'weekday' | 'saturday' | 'sunday_poya';
 
-const SAT_OT_START = '12:00';
+const SAT_OT_START = '13:30';
 
 const toMinutes = (t: string): number => {
     const [h, m] = t.split(':').map(Number);
@@ -10,7 +10,7 @@ const toMinutes = (t: string): number => {
 /**
  * Determines the day type for OT calculation:
  * - sunday_poya: Sunday OR any date in poyaDates (full-day OT)
- * - saturday:    Saturday (OT after 12:00 + early arrival before default in)
+ * - saturday:    Saturday (OT after 13:30 + early arrival before default in)
  * - weekday:     Mon–Fri (OT before default in + after default out)
  */
 const toLocalDateStr = (d: Date): string => {
@@ -48,7 +48,7 @@ export const getDayType = (taskDate: Date | string, poyaDates: Set<string>): Day
  * Calculates extra (OT) hours based on day type:
  *
  * sunday_poya → full working hours (out - in) = all OT
- * saturday    → early arrival (before default_in) + after 12:00
+ * saturday    → early arrival (before default_in) + after 13:30
  * weekday     → early arrival (before default_in) + late departure (after default_out)
  *
  * Returns exact decimal hours for display (e.g. 2.5, 3.9).
@@ -73,7 +73,7 @@ export const calculateTimeBasedExtra = (
 
     if (dayType === 'saturday') {
         const defaultIn  = toMinutes(defaultInTimeStr || '08:30');
-        const satCutoff  = toMinutes(SAT_OT_START); // 12:00
+        const satCutoff  = toMinutes(SAT_OT_START); // 13:30
         let extra = 0;
         if (inTimeStr && actualIn < defaultIn) extra += defaultIn - actualIn;
         if (actualOut > satCutoff) extra += actualOut - satCutoff;
