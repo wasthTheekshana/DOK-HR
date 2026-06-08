@@ -719,6 +719,16 @@ function groupBySiteKey(
 
 export const getSiteProfitability = async (req: Request, res: Response) => {
     try {
+        const { date_from, date_to } = req.query;
+        const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+        if (date_from || date_to) {
+            if (!date_from || !date_to || !DATE_RE.test(String(date_from)) || !DATE_RE.test(String(date_to))) {
+                return res.status(400).json({ message: 'Provide both date_from and date_to in YYYY-MM-DD format.' });
+            }
+        }
+        const hasFilter = date_from && date_to;
+        const dateClause = hasFilter ? `AND pa.date_from >= :date_from AND pa.date_to <= :date_to` : '';
+
         const result = await execute<any>(
             `SELECT
                 s.id                                                                        AS site_id,
@@ -733,10 +743,10 @@ export const getSiteProfitability = async (req: Request, res: Response) => {
                 COALESCE(SUM(pa.invoice_price - pa.cost_variant_amount
                         - pa.salary_ot_amount - pa.expense_cost),                       0)  AS net_profit
              FROM sites s
-             LEFT JOIN profit_amount pa ON pa.site_id = s.id
+             LEFT JOIN profit_amount pa ON pa.site_id = s.id ${dateClause}
              GROUP BY s.id, s.site_no, s.name, s.service_type, s.site_type, s.ot_type
              ORDER BY net_profit DESC`,
-            {}
+            hasFilter ? { date_from: String(date_from), date_to: String(date_to) } : {}
         );
 
         const sites = (result.rows || []).map((r: any) => {

@@ -201,20 +201,20 @@ const Analytics: React.FC = () => {
     const fetchProfit = useCallback(async () => {
         setLoadingProfit(true);
         try {
-            const res = await api.get('/analytics/profitability');
+            const res = await api.get('/analytics/profitability', { params: { date_from: dateFrom, date_to: dateTo } });
             setProfitData(res.data);
         } catch (e) { console.error(e); }
         finally { setLoadingProfit(false); }
-    }, []);
+    }, [dateFrom, dateTo]);
 
     const fetchInvoiceAnalysis = useCallback(async () => {
         setLoadingInvAnalysis(true);
         try {
-            const res = await api.get('/analytics/invoice-analysis');
+            const res = await api.get('/analytics/invoice-analysis', { params: { date_from: dateFrom, date_to: dateTo } });
             setInvAnalysis(res.data);
         } catch (e) { console.error(e); }
         finally { setLoadingInvAnalysis(false); }
-    }, []);
+    }, [dateFrom, dateTo]);
 
     // Load on mount + when date changes
     useEffect(() => { fetchWorkforce(); }, [fetchWorkforce]);
