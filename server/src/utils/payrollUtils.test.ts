@@ -6,35 +6,39 @@ describe('Payroll Calculations', () => {
     describe('Time Based OT', () => {
         const DEFAULT_OUT = '17:00';
 
-        test('should floor 2.5 hours to 2', () => {
-            // 19:30 - 17:00 = 2h 30m -> floor to 2
-            expect(calculateTimeBasedExtra('19:30', DEFAULT_OUT)).toBe(2);
+        test('should return exact decimal 2.5 for 2h 30m OT', () => {
+            // 19:30 - 17:00 = 150m = 2.5h
+            expect(calculateTimeBasedExtra('19:30', DEFAULT_OUT)).toBe(2.5);
         });
 
-        test('should floor 2.4 hours to 2', () => {
-            // 19:24 - 17:00 = 2h 24m -> floor to 2
-            expect(calculateTimeBasedExtra('19:24', DEFAULT_OUT)).toBe(2);
+        test('should return exact decimal 2.4 for 2h 24m OT', () => {
+            // 19:24 - 17:00 = 144m = 2.4h
+            expect(calculateTimeBasedExtra('19:24', DEFAULT_OUT)).toBe(2.4);
         });
 
-        test('should floor 2.9 hours to 2', () => {
-            // 19:54 - 17:00 = 2h 54m -> floor to 2
-            expect(calculateTimeBasedExtra('19:54', DEFAULT_OUT)).toBe(2);
+        test('should return exact decimal 2.9 for 2h 54m OT', () => {
+            // 19:54 - 17:00 = 174m = 2.9h
+            expect(calculateTimeBasedExtra('19:54', DEFAULT_OUT)).toBe(2.9);
         });
 
         test('should return 0 if out time is before default out', () => {
             expect(calculateTimeBasedExtra('16:00', DEFAULT_OUT)).toBe(0);
         });
 
-        test('should floor 0.5 hours to 0', () => {
-            // 17:30 - 17:00 = 30m -> floor to 0
-            expect(calculateTimeBasedExtra('17:30', DEFAULT_OUT)).toBe(0);
+        test('should return exact decimal 0.5 for 30m OT', () => {
+            // 17:30 - 17:00 = 30m = 0.5h
+            expect(calculateTimeBasedExtra('17:30', DEFAULT_OUT)).toBe(0.5);
         });
 
-        test('should calculate payment correctly based on basic salary', () => {
-            // Basic = 24000
-            // Rate = (24000 / 240) * 1.5 = 100 * 1.5 = 150
-            // Extra Hours = 2
-            // Expected = 300
+        test('should calculate payment using floored hours (2.9h pays as 2h)', () => {
+            // Basic = 24000, Rate = (24000/240)*1.5 = 150, floor(2.9)=2 → 300
+            const result = calculateTimeBasedPayment(2.9, 24000);
+            expect(result.payment).toBe(300);
+            expect(result.rate).toBe(150);
+        });
+
+        test('should calculate payment correctly for whole hours', () => {
+            // Basic = 24000, Rate = 150, 2h → 300
             const result = calculateTimeBasedPayment(2, 24000);
             expect(result.payment).toBe(300);
             expect(result.rate).toBe(150);

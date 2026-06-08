@@ -51,7 +51,8 @@ export const getDayType = (taskDate: Date | string, poyaDates: Set<string>): Day
  * saturday    → early arrival (before default_in) + after 12:00
  * weekday     → early arrival (before default_in) + late departure (after default_out)
  *
- * Returns floored hours (fractional hours are dropped, never rounded up).
+ * Returns exact decimal hours for display (e.g. 2.5, 3.9).
+ * Payment uses Math.floor of this value — see calculateTimeBasedPayment.
  */
 export const calculateTimeBasedExtra = (
     outTimeStr: string,
@@ -66,20 +67,17 @@ export const calculateTimeBasedExtra = (
     const actualIn  = inTimeStr ? toMinutes(inTimeStr) : toMinutes(defaultInTimeStr || '08:30');
 
     if (dayType === 'sunday_poya') {
-        // Entire shift is OT
         const total = actualOut - actualIn;
-        return total > 0 ? Math.floor(total / 60) : 0;
+        return total > 0 ? Math.round(total / 60 * 100) / 100 : 0;
     }
 
     if (dayType === 'saturday') {
         const defaultIn  = toMinutes(defaultInTimeStr || '08:30');
         const satCutoff  = toMinutes(SAT_OT_START); // 12:00
         let extra = 0;
-        // Early arrival before 08:30
         if (inTimeStr && actualIn < defaultIn) extra += defaultIn - actualIn;
-        // Work after 12:00
         if (actualOut > satCutoff) extra += actualOut - satCutoff;
-        return extra > 0 ? Math.floor(extra / 60) : 0;
+        return extra > 0 ? Math.round(extra / 60 * 100) / 100 : 0;
     }
 
     // Weekday
@@ -92,14 +90,15 @@ export const calculateTimeBasedExtra = (
         const diff = toMinutes(defaultInTimeStr) - actualIn;
         if (diff > 0) extra += diff;
     }
-    return extra > 0 ? Math.floor(extra / 60) : 0;
+    return extra > 0 ? Math.round(extra / 60 * 100) / 100 : 0;
 };
 
 export const calculateTimeBasedPayment = (extraHours: number, basicSalary: number): { payment: number, rate: number } => {
     if (!basicSalary || basicSalary <= 0) return { payment: 0, rate: 0 };
     const hourlyRate = (basicSalary / 240) * 1.5;
+    // Floor hours so fractional minutes are never paid (e.g. 2.9h pays for 2h)
     return {
-        payment: extraHours * hourlyRate,
+        payment: Math.floor(extraHours) * hourlyRate,
         rate: hourlyRate
     };
 };
