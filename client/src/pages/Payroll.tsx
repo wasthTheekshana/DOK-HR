@@ -530,7 +530,7 @@ const Payroll: React.FC = () => {
                                         if (viewMode === 'detailed') {
                                             const dt = row.day_type || 'weekday';
                                             const dtInfo = DAY_TYPE_LABEL[dt] || DAY_TYPE_LABEL.weekday;
-                                            const defOutDisplay = dt === 'saturday' ? '12:00 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
+                                            const defOutDisplay = dt === 'saturday' ? '13:30 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
                                             return (
                                                 <tr key={idx} className={`hover:bg-slate-50/60 transition-colors ${dt === 'sunday_poya' ? 'bg-orange-50/40' : dt === 'saturday' ? 'bg-blue-50/30' : ''}`}>
                                                     {!siteFilter && <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.SITE_NO || '-'}</td>}
@@ -567,7 +567,7 @@ const Payroll: React.FC = () => {
                                     } else if (otType === 'time_based' && viewMode === 'detailed' && siteFilter) {
                                         const dt = row.day_type || 'weekday';
                                         const dtInfo = DAY_TYPE_LABEL[dt] || DAY_TYPE_LABEL.weekday;
-                                        const defOutDisplay = dt === 'saturday' ? '12:00 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
+                                        const defOutDisplay = dt === 'saturday' ? '13:30 (Sat)' : dt === 'sunday_poya' ? 'Full Day' : (row.default_out_time || DEFAULT_OUT_TIME);
                                         return (
                                             <tr key={idx} className={`hover:bg-slate-50/60 transition-colors ${dt === 'sunday_poya' ? 'bg-orange-50/40' : dt === 'saturday' ? 'bg-blue-50/30' : ''}`}>
                                                 <td className="px-5 py-4 text-sm text-slate-500 font-mono whitespace-nowrap">{row.EPF_NUMBER || '-'}</td>
