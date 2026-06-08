@@ -51,7 +51,7 @@ export const getDayType = (taskDate: Date | string, poyaDates: Set<string>): Day
  * saturday    → early arrival (before default_in) + after 12:00
  * weekday     → early arrival (before default_in) + late departure (after default_out)
  *
- * Returns rounded hours (half-up to nearest integer).
+ * Returns floored hours (fractional hours are dropped, never rounded up).
  */
 export const calculateTimeBasedExtra = (
     outTimeStr: string,
@@ -68,7 +68,7 @@ export const calculateTimeBasedExtra = (
     if (dayType === 'sunday_poya') {
         // Entire shift is OT
         const total = actualOut - actualIn;
-        return total > 0 ? Math.round(total / 60) : 0;
+        return total > 0 ? Math.floor(total / 60) : 0;
     }
 
     if (dayType === 'saturday') {
@@ -79,7 +79,7 @@ export const calculateTimeBasedExtra = (
         if (inTimeStr && actualIn < defaultIn) extra += defaultIn - actualIn;
         // Work after 12:00
         if (actualOut > satCutoff) extra += actualOut - satCutoff;
-        return extra > 0 ? Math.round(extra / 60) : 0;
+        return extra > 0 ? Math.floor(extra / 60) : 0;
     }
 
     // Weekday
@@ -92,7 +92,7 @@ export const calculateTimeBasedExtra = (
         const diff = toMinutes(defaultInTimeStr) - actualIn;
         if (diff > 0) extra += diff;
     }
-    return extra > 0 ? Math.round(extra / 60) : 0;
+    return extra > 0 ? Math.floor(extra / 60) : 0;
 };
 
 export const calculateTimeBasedPayment = (extraHours: number, basicSalary: number): { payment: number, rate: number } => {
