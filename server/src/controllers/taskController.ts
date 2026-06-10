@@ -106,7 +106,8 @@ export const getTasks = async (req: Request, res: Response) => {
 export const createTask = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
     const userId   = (req as any).user.id;
-    const { site_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
+    const { site_id, task_description, ot_type, target, pay_unit_price, task_date, count, in_time, out_time } = req.body;
+    let { invoice_price } = req.body;
     // Staff can only create tasks for themselves
     const staff_id = userRole === 'staff' ? userId : req.body.staff_id;
 
@@ -115,6 +116,18 @@ export const createTask = async (req: Request, res: Response) => {
     }
 
     try {
+        if (userRole === 'staff') {
+            // Staff don't set pricing — derive it from the site's configured task types
+            const priceRes = await execute<any>(
+                `SELECT invoice_price FROM site_task_types
+                 WHERE site_id = :site_id AND LOWER(TRIM(task_name)) = LOWER(TRIM(:task_name))`,
+                { site_id: Number(site_id), task_name: String(task_description || '') }
+            );
+            if (priceRes.rows && priceRes.rows.length > 0) {
+                invoice_price = Number(priceRes.rows[0].INVOICE_PRICE) || 0;
+            }
+        }
+
         await execute(
             `INSERT INTO tasks (site_id, staff_id, task_description, invoice_price, ot_type, target, pay_unit_price, task_date, count, in_time, out_time)
        VALUES (:site_id, :staff_id, :task_description, :invoice_price, :ot_type, :target, :pay_unit_price, :task_date, :count, :in_time, :out_time)`,
@@ -131,43 +144,67 @@ export const createTask = async (req: Request, res: Response) => {
     }
 };
 
+// Returns the task row joined with its site's supervisor, or null when not found.
+async function getTaskWithSite(taskId: string | number) {
+    const result = await execute<any>(
+        `SELECT t.id, t.site_id, t.staff_id, t.ot_type, s.supervisor_id
+         FROM tasks t JOIN sites s ON t.site_id = s.id
+         WHERE t.id = :id`,
+        { id: String(taskId) }
+    );
+    return result.rows?.[0] ?? null;
+}
+
+// True when the caller may modify this task (staff: own tasks; supervisor: own sites).
+function canModifyTask(userRole: string, userId: number, taskRow: any): boolean {
+    if (userRole === 'staff')      return Number(taskRow.STAFF_ID) === Number(userId);
+    if (userRole === 'supervisor') return Number(taskRow.SUPERVISOR_ID) === Number(userId);
+    return true; // admin / system_admin
+}
+
+// Updatable columns — only fields present in the body are written (PATCH semantics).
+const TASK_UPDATE_FIELDS = ['task_description', 'count', 'pay_unit_price', 'invoice_price', 'in_time', 'out_time', 'target', 'task_date'] as const;
+
+function buildTaskUpdate(body: any): { setSql: string; params: any } | null {
+    const updates: string[] = [];
+    const params: any = {};
+    for (const field of TASK_UPDATE_FIELDS) {
+        if (field in body) {
+            updates.push(`${field} = :${field}`);
+            params[field] = body[field] ?? null;
+        }
+    }
+    if (updates.length === 0) return null;
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    return { setSql: updates.join(', '), params };
+}
+
 export const updateTask = async (req: Request, res: Response) => {
     const { id } = req.params;
     const userRole = (req as any).user.role;
     const userId   = (req as any).user.id;
-    const { task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date, target } = req.body;
+    const { in_time, out_time, task_date } = req.body;
 
     if (['staff', 'supervisor'].includes(userRole) && isBackdate(task_date)) {
         return res.status(400).json({ message: 'Backdating is not allowed' });
     }
 
     try {
-        if (userRole === 'staff') {
-            const check = await execute<any>(`SELECT staff_id FROM tasks WHERE id = :id`, { id: String(id) });
-            if (!check.rows?.[0] || Number(check.rows[0].STAFF_ID) !== Number(userId)) {
-                return res.status(403).json({ message: 'Forbidden: can only edit your own tasks' });
-            }
+        const taskRow = await getTaskWithSite(String(id));
+        if (!taskRow) return res.status(404).json({ message: 'Task not found' });
+        if (!canModifyTask(userRole, userId, taskRow)) {
+            return res.status(403).json({ message: 'Forbidden: you can only edit tasks on your own site' });
         }
+
+        const update = buildTaskUpdate(req.body);
+        if (!update) return res.json({ message: 'No changes' });
+
         await execute(
-            `UPDATE tasks
-           SET task_description = :task_description,
-               count = :count,
-               pay_unit_price = :pay_unit_price,
-               invoice_price = :invoice_price,
-               in_time = :in_time,
-               out_time = :out_time,
-               target = :target,
-               task_date = :task_date,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = :id`,
-            { task_description, count, pay_unit_price, invoice_price, in_time, out_time, target, task_date, id: String(id) }
+            `UPDATE tasks SET ${update.setSql} WHERE id = :id`,
+            { ...update.params, id: String(id) }
         );
-        const taskRes = await execute<any>(
-            `SELECT t.site_id, t.staff_id, t.ot_type FROM tasks t WHERE t.id = :id`,
-            { id: String(id) }
-        );
-        const taskRow = taskRes.rows?.[0];
-        if (taskRow && task_date) {
+
+        if (task_date) {
             await syncAttendance(
                 Number(taskRow.SITE_ID),
                 Number(taskRow.STAFF_ID),
@@ -192,29 +229,21 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
 
     try {
         for (const row of rows) {
-            const { id, task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date } = row;
+            const { id, in_time, out_time, task_date } = row;
             if (!id) continue;
             if (['staff', 'supervisor'].includes(userRole) && isBackdate(task_date)) continue;
-            const taskRes = await execute<any>(
-                `SELECT site_id, staff_id, ot_type FROM tasks WHERE id = :id`,
-                { id }
-            );
-            const taskRow = taskRes.rows?.[0];
-            if (userRole === 'staff' && taskRow && Number(taskRow.STAFF_ID) !== Number(userId)) continue;
+
+            const taskRow = await getTaskWithSite(id);
+            if (!taskRow || !canModifyTask(userRole, userId, taskRow)) continue;
+
+            const update = buildTaskUpdate(row);
+            if (!update) continue;
+
             await execute(
-                `UPDATE tasks
-                 SET task_description = :task_description,
-                     count = :count,
-                     pay_unit_price = :pay_unit_price,
-                     invoice_price = :invoice_price,
-                     in_time = :in_time,
-                     out_time = :out_time,
-                     task_date = :task_date,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = :id`,
-                { task_description, count, pay_unit_price, invoice_price, in_time, out_time, task_date, id }
+                `UPDATE tasks SET ${update.setSql} WHERE id = :id`,
+                { ...update.params, id }
             );
-            if (taskRow && task_date) {
+            if (task_date) {
                 await syncAttendance(
                     Number(taskRow.SITE_ID),
                     Number(taskRow.STAFF_ID),
@@ -234,7 +263,14 @@ export const bulkSaveTasks = async (req: Request, res: Response) => {
 
 export const deleteTask = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
     try {
+        const taskRow = await getTaskWithSite(String(id));
+        if (!taskRow) return res.status(404).json({ message: 'Task not found' });
+        if (!canModifyTask(userRole, userId, taskRow)) {
+            return res.status(403).json({ message: 'Forbidden: you can only delete tasks on your own site' });
+        }
         await execute(`DELETE FROM tasks WHERE id = :id`, { id: Number(id) });
         res.json({ message: 'Task deleted' });
     } catch (err) {
@@ -245,6 +281,8 @@ export const deleteTask = async (req: Request, res: Response) => {
 
 export const getDailyCountReport = async (req: Request, res: Response) => {
     const { date, site_id } = req.query;
+    const callerRole = (req as any).user?.role;
+    const callerId   = (req as any).user?.id;
 
     if (!date) {
         return res.status(400).json({ message: 'date is required' });
@@ -273,6 +311,11 @@ export const getDailyCountReport = async (req: Request, res: Response) => {
         `;
 
         const params: any = { task_date_param: String(date) };
+
+        if (callerRole === 'supervisor') {
+            query += ` AND s.supervisor_id = :callerId`;
+            params.callerId = callerId;
+        }
 
         if (site_id) {
             query += ` AND t.site_id = :site_id`;
@@ -477,10 +520,14 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
 
         const staffMap = new Map<string, any>();
 
+        // Payment is floored PER DAY (same rule as getPayroll) so this report
+        // and the payroll page always agree on totals.
         const accumulate = (staffId: number, siteNo: string, entry: any, extraHours: number) => {
             const key = `${staffId}_${siteNo}`;
-            if (!staffMap.has(key)) staffMap.set(key, { ...entry, TOTAL_EXTRA_HRS: 0 });
-            staffMap.get(key)!.TOTAL_EXTRA_HRS += extraHours;
+            if (!staffMap.has(key)) staffMap.set(key, { ...entry, TOTAL_EXTRA_HRS: 0, TOTAL_PAYMENT: 0 });
+            const acc = staffMap.get(key)!;
+            acc.TOTAL_EXTRA_HRS += extraHours;
+            acc.TOTAL_PAYMENT   += calculateTimeBasedPayment(extraHours, entry.BASIC_SALARY).payment;
         };
 
         // Time-based sites only — from tasks table
@@ -542,9 +589,8 @@ export const getOTAnalysisReport = async (req: Request, res: Response) => {
         const aggregatedData = Array.from(staffMap.values()).map((entry: any) => {
             // 90% = fix count: hours tracked but no OT payment
             const isOT = !entry.IS_OUTSOURCE && entry.OT_PERCENTAGE > 0 && entry.OT_PERCENTAGE !== 90;
-            const { payment, rate: otRate } = isOT
-                ? calculateTimeBasedPayment(entry.TOTAL_EXTRA_HRS, entry.BASIC_SALARY)
-                : { payment: 0, rate: 0 };
+            const payment = isOT ? entry.TOTAL_PAYMENT : 0;
+            const otRate  = isOT ? calculateTimeBasedPayment(1, entry.BASIC_SALARY).rate : 0;
             return {
                 SITE_NO:         entry.SITE_NO,
                 SITE_NAME:       entry.SITE_NAME,

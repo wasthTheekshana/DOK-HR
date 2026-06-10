@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { execute } from '../db/dbUtils';
+import { execute, withTransaction } from '../db/dbUtils';
 import { getDayType, calculateTimeBasedExtra } from '../utils/payrollUtils';
 
 const DEFAULT_IN_TIME  = '08:30';
@@ -343,51 +343,64 @@ export const saveInvoice = async (req: Request, res: Response) => {
     }, 0);
 
     try {
-        for (const variant of variants) {
-            const key   = String(variant.key).trim();
-            const value = String(variant.value).trim();
-            if (!key) continue;
-
-            const existing = await execute<any>(
-                `SELECT id FROM cost_varient WHERE site_id = :site_id AND factor_key = :key`,
-                { site_id: Number(site_id), key }
-            );
-
-            if (existing.rows && existing.rows.length > 0) {
-                await execute(
-                    `UPDATE cost_varient SET factor_value = :value WHERE site_id = :site_id AND factor_key = :key`,
-                    { site_id: Number(site_id), key, value }
-                );
-            } else {
-                await execute(
-                    `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :key, :value)`,
-                    { site_id: Number(site_id), key, value }
-                );
-            }
+        // Same guard as bulk-generate: one invoice per site+period
+        const existingInvoice = await execute<any>(
+            `SELECT id FROM profit_amount
+             WHERE site_id = :site_id AND date_from = :date_from AND date_to = :date_to`,
+            { site_id: Number(site_id), date_from, date_to }
+        );
+        if (existingInvoice.rows && existingInvoice.rows.length > 0) {
+            return res.status(409).json({ message: 'An invoice already exists for this site and period. Edit or delete the existing one instead.' });
         }
 
-        const result = await execute<any>(
-            `INSERT INTO profit_amount
-                (site_id, site_no, site_name, date_from, date_to,
-                 cost_variant_amount, salary_ot_amount, expense_cost, invoice_price, created_by)
-             VALUES
-                (:site_id, :site_no, :site_name,
-                 :date_from, :date_to,
-                 :cost_variant_amount, :salary_ot_amount, 0, :invoice_price, :created_by)
-             RETURNING id`,
-            {
-                site_id:             Number(site_id),
-                site_no:             site_no   || '',
-                site_name:           site_name || '',
-                date_from,
-                date_to,
-                cost_variant_amount: Math.round(cost_variant_amount * 100) / 100,
-                salary_ot_amount:    Number(salary_ot_amount) || 0,
-                invoice_price:       Number(invoice_price)    || 0,
-                created_by:          userId,
+        const newId = await withTransaction(async (exec) => {
+            for (const variant of variants) {
+                const key   = String(variant.key).trim();
+                const value = String(variant.value).trim();
+                if (!key) continue;
+
+                const existing = await exec<any>(
+                    `SELECT id FROM cost_varient WHERE site_id = :site_id AND factor_key = :key`,
+                    { site_id: Number(site_id), key }
+                );
+
+                if (existing.rows && existing.rows.length > 0) {
+                    await exec(
+                        `UPDATE cost_varient SET factor_value = :value WHERE site_id = :site_id AND factor_key = :key`,
+                        { site_id: Number(site_id), key, value }
+                    );
+                } else {
+                    await exec(
+                        `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :key, :value)`,
+                        { site_id: Number(site_id), key, value }
+                    );
+                }
             }
-        );
-        const newId = result.rows?.[0]?.ID;
+
+            const result = await exec<any>(
+                `INSERT INTO profit_amount
+                    (site_id, site_no, site_name, date_from, date_to,
+                     cost_variant_amount, salary_ot_amount, expense_cost, invoice_price, created_by)
+                 VALUES
+                    (:site_id, :site_no, :site_name,
+                     :date_from, :date_to,
+                     :cost_variant_amount, :salary_ot_amount, 0, :invoice_price, :created_by)
+                 RETURNING id`,
+                {
+                    site_id:             Number(site_id),
+                    site_no:             site_no   || '',
+                    site_name:           site_name || '',
+                    date_from,
+                    date_to,
+                    cost_variant_amount: Math.round(cost_variant_amount * 100) / 100,
+                    salary_ot_amount:    Number(salary_ot_amount) || 0,
+                    invoice_price:       Number(invoice_price)    || 0,
+                    created_by:          userId,
+                }
+            );
+            return result.rows?.[0]?.ID;
+        });
+
         res.status(201).json({ message: 'Invoice saved', id: newId });
     } catch (err) {
         console.error('saveInvoice error:', err);

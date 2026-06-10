@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
-import { computeWorkingDays } from '../utils/analyticsUtils';
+import { computeWorkingDays, localToday, firstOfCurrentMonth, firstOfMonthsAgo } from '../utils/analyticsUtils';
 
 const EXTRA_UNIT_RATE = Number(process.env.EXTRA_UNIT_RATE) || 0.5;
 
@@ -72,8 +72,8 @@ export const getWorkforceAnalytics = async (req: Request, res: Response) => {
 
 export const getTaskAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         const [dailyRes, siteProductRes, topPerfRes, achieveRes] = await Promise.all([
@@ -162,8 +162,8 @@ export const getTaskAnalytics = async (req: Request, res: Response) => {
 
 export const getAttendanceAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setMonth(new Date().getMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfMonthsAgo(6);
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         const [monthlyRes, siteMonthlyRes, avgHoursRes, lateStayRes] = await Promise.all([
@@ -266,8 +266,8 @@ export const getAttendanceAnalytics = async (req: Request, res: Response) => {
 
 export const getPayrollAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setMonth(new Date().getMonth() - 6, 1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfMonthsAgo(6);
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         const [summaryRes, monthlyOTRes, sitePayrollRes, targetOTRes, timeOTRes] = await Promise.all([
@@ -394,8 +394,8 @@ export const getPayrollAnalytics = async (req: Request, res: Response) => {
 
 export const getSiteAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -506,8 +506,8 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
 
 export const getSiteCountTrend = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         const result = await execute<any>(
@@ -549,8 +549,8 @@ export const getSiteCountTrend = async (req: Request, res: Response) => {
 
 export const getPerformanceAnalytics = async (req: Request, res: Response) => {
     const { date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     try {
         const perfRes = await execute<any>(
@@ -605,8 +605,8 @@ export const getPerformanceAnalytics = async (req: Request, res: Response) => {
 
 export const getSitePerformanceAnalysis = async (req: Request, res: Response) => {
     const { site_id, date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to = (typeof date_to === 'string' ? date_to : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to = (typeof date_to === 'string' ? date_to : undefined) ?? localToday();
 
     if (!site_id) {
         return res.status(400).json({ message: 'site_id is required' });
@@ -805,9 +805,8 @@ export const getInvoiceAnalysis = async (req: Request, res: Response) => {
             }
         }
 
-        const now = new Date();
-        const df = hasFilter ? String(date_from) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        const dt = hasFilter ? String(date_to)   : now.toISOString().slice(0, 10);
+        const df = hasFilter ? String(date_from) : firstOfCurrentMonth();
+        const dt = hasFilter ? String(date_to)   : localToday();
 
         const filterWhere   = `WHERE date_from >= :df AND date_to <= :dt`;
         const filterWherePA = `WHERE pa.date_from >= :df AND pa.date_to <= :dt`;
@@ -1198,8 +1197,8 @@ export const getSiteSnapshot = async (req: Request, res: Response) => {
 
 export const getTimeSitePerformance = async (req: Request, res: Response) => {
     const { site_id, date_from, date_to } = req.query;
-    const from = (typeof date_from === 'string' ? date_from : undefined) ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-    const to   = (typeof date_to   === 'string' ? date_to   : undefined) ?? new Date().toISOString().slice(0, 10);
+    const from = (typeof date_from === 'string' ? date_from : undefined) ?? firstOfCurrentMonth();
+    const to   = (typeof date_to   === 'string' ? date_to   : undefined) ?? localToday();
     if (!site_id) return res.status(400).json({ message: 'site_id is required' });
 
     try {
@@ -1403,9 +1402,8 @@ export const getTimeSitePerformance = async (req: Request, res: Response) => {
 // ─── Service Mindmap Analysis ────────────────────────────────────────────────
 
 export const getServiceMindmap = async (req: Request, res: Response) => {
-    const today = new Date();
-    const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-    const defaultTo   = today.toISOString().slice(0, 10);
+    const defaultFrom = firstOfCurrentMonth();
+    const defaultTo   = localToday();
     const from = (typeof req.query.date_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from)) ? req.query.date_from : defaultFrom;
     const to   = (typeof req.query.date_to   === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to))   ? req.query.date_to   : defaultTo;
 
@@ -1540,9 +1538,8 @@ export const getServiceSiteDetail = async (req: Request, res: Response) => {
     const sid = Number(site_id);
     if (!sid) return res.status(400).json({ message: 'site_id required' });
 
-    const today = new Date();
-    const defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-    const defaultTo   = today.toISOString().slice(0, 10);
+    const defaultFrom = firstOfCurrentMonth();
+    const defaultTo   = localToday();
     const from = (typeof req.query.date_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_from)) ? req.query.date_from : defaultFrom;
     const to   = (typeof req.query.date_to   === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date_to))   ? req.query.date_to   : defaultTo;
 

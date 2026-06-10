@@ -93,6 +93,11 @@ export const getUsers = async (req: Request, res: Response) => {
 
 export const getUserById = async (req: Request, res: Response) => {
     const { id } = req.params;
+    const callerRole = (req as any).user.role;
+    const callerId   = (req as any).user.id;
+    const isPrivileged = callerRole === 'admin' || callerRole === 'system_admin';
+    const isSelf = String(callerId) === String(id);
+
     try {
         const result = await execute<any>(
             `SELECT id, epf_number, name, role, status, site_id, inactivation_requested, basic_salary, ot_percentage, fix_salary, created_at FROM users WHERE id = :id`,
@@ -101,7 +106,25 @@ export const getUserById = async (req: Request, res: Response) => {
         if (!result.rows || result.rows.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
-        res.json(result.rows[0]);
+        const user = result.rows[0];
+
+        if (isPrivileged || isSelf) {
+            return res.json(user);
+        }
+
+        if (callerRole === 'supervisor') {
+            // Supervisors may view users on their own sites — without salary fields
+            const siteCheck = await execute<any>(
+                `SELECT 1 FROM sites WHERE supervisor_id = :callerId AND id = :siteId`,
+                { callerId, siteId: user.SITE_ID }
+            );
+            if (siteCheck.rows && siteCheck.rows.length > 0) {
+                const { BASIC_SALARY, OT_PERCENTAGE, FIX_SALARY, ...withoutSalary } = user;
+                return res.json(withoutSalary);
+            }
+        }
+
+        return res.status(403).json({ message: 'Forbidden' });
     } catch (err) {
         console.error('getUserById error:', err);
         res.status(500).json({ message: 'Server error' });

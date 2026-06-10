@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
-import { execute } from '../db/dbUtils';
+import { execute, withTransaction } from '../db/dbUtils';
 import { calculateTimeBasedExtra, calculateTimeBasedPayment, calculateTargetBasedExtra, calculateTargetBasedPayment, getDayType } from '../utils/payrollUtils';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { computeWorkingDays } from '../utils/analyticsUtils';
 
 const DEFAULT_OUT_TIME = '17:00';
 const DEFAULT_IN_TIME  = '08:30';
-const DAYS_IN_PERIOD = Number(process.env.DAYS_IN_PERIOD) || 22;
 const EXTRA_UNIT_RATE = Number(process.env.EXTRA_UNIT_RATE) || 0.5;
 
 export const getPayroll = async (req: AuthRequest, res: Response) => {
@@ -100,8 +99,10 @@ export const getPayroll = async (req: AuthRequest, res: Response) => {
             return res.json(rows);
 
         } else if (ot_type === 'target_based') {
-            // Aggregated by staff
-            // Summing target from sites table (fixed daily target * DAYS_IN_PERIOD)
+            // Aggregated by staff.
+            // Target scales with the selected range (same rule as getExtraUnitsSummary),
+            // not a fixed 22-day period.
+            const workingDays = computeWorkingDays(String(date_from), String(date_to));
             let query = `
                 SELECT t.staff_id, u.epf_number, u.name, s.site_no, s.name as site_name, SUM(t.count) as sum_count, MAX(s.daily_target) as daily_target
                 FROM tasks t
@@ -138,7 +139,7 @@ export const getPayroll = async (req: AuthRequest, res: Response) => {
                         extra_payment: 0
                     };
                 }
-                const totalTarget = dailyTarget * DAYS_IN_PERIOD;
+                const totalTarget = dailyTarget * workingDays;
                 const extraUnits = calculateTargetBasedExtra(row.SUM_COUNT, totalTarget);
                 const extraPayment = calculateTargetBasedPayment(extraUnits, EXTRA_UNIT_RATE);
                 return {
@@ -425,37 +426,62 @@ export const saveCustomOTReport = async (req: AuthRequest, res: Response) => {
     const savedBy = req.user?.id ?? null;
 
     try {
-        for (const record of records) {
-            await execute(
-                `INSERT INTO custom_ot_records (
-                    batch_id, site_no, site_name, staff_id, epf_number, staff_name,
-                    date_from, date_to, calculation_type, custom_percentage,
-                    total_extra_hours, total_adjusted_hours, ot_rate, total_payment, saved_by
-                ) VALUES (
-                    :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
-                    :date_from, :date_to,
-                    :calculation_type, :custom_percentage,
-                    :total_extra_hours, :total_adjusted_hours, :ot_rate, :total_payment, :saved_by
-                )`,
-                {
-                    batch_id: batchId,
-                    site_no: record.site_no || null,
-                    site_name: record.site_name || null,
-                    staff_id: record.staff_id,
-                    epf_number: record.epf_number || null,
-                    staff_name: record.staff_name,
-                    date_from: String(date_from),
-                    date_to: String(date_to),
-                    calculation_type: record.calculation_type || null,
-                    custom_percentage: record.custom_percentage ?? null,
-                    total_extra_hours: record.total_extra_hours || 0,
-                    total_adjusted_hours: record.total_adjusted_extra_hours || 0,
-                    ot_rate: record.ot_rate || 0,
-                    total_payment: record.total_payment || 0,
-                    saved_by: savedBy
-                }
+        // Reject duplicate saves: invoices SUM all overlapping batches, so a second
+        // batch for the same site+period would double-count OT.
+        const siteNos: string[] = Array.from(new Set(
+            records.map((r: any) => String(r.site_no || site_no || '')).filter(Boolean)
+        ));
+        if (siteNos.length > 0) {
+            const snParams: any = { date_from: String(date_from), date_to: String(date_to) };
+            const placeholders = siteNos.map((_, i) => `:sn${i}`).join(', ');
+            siteNos.forEach((sn, i) => { snParams[`sn${i}`] = sn; });
+            const dup = await execute<any>(
+                `SELECT DISTINCT site_no FROM custom_ot_records
+                 WHERE date_from = :date_from AND date_to = :date_to
+                   AND site_no IN (${placeholders})`,
+                snParams
             );
+            if (dup.rows && dup.rows.length > 0) {
+                const dupSites = dup.rows.map((r: any) => r.SITE_NO).join(', ');
+                return res.status(409).json({
+                    message: `A saved OT batch already exists for this period (site: ${dupSites}). Delete the existing batch first.`,
+                });
+            }
         }
+
+        await withTransaction(async (exec) => {
+            for (const record of records) {
+                await exec(
+                    `INSERT INTO custom_ot_records (
+                        batch_id, site_no, site_name, staff_id, epf_number, staff_name,
+                        date_from, date_to, calculation_type, custom_percentage,
+                        total_extra_hours, total_adjusted_hours, ot_rate, total_payment, saved_by
+                    ) VALUES (
+                        :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
+                        :date_from, :date_to,
+                        :calculation_type, :custom_percentage,
+                        :total_extra_hours, :total_adjusted_hours, :ot_rate, :total_payment, :saved_by
+                    )`,
+                    {
+                        batch_id: batchId,
+                        site_no: record.site_no || null,
+                        site_name: record.site_name || null,
+                        staff_id: record.staff_id,
+                        epf_number: record.epf_number || null,
+                        staff_name: record.staff_name,
+                        date_from: String(date_from),
+                        date_to: String(date_to),
+                        calculation_type: record.calculation_type || null,
+                        custom_percentage: record.custom_percentage ?? null,
+                        total_extra_hours: record.total_extra_hours || 0,
+                        total_adjusted_hours: record.total_adjusted_extra_hours || 0,
+                        ot_rate: record.ot_rate || 0,
+                        total_payment: record.total_payment || 0,
+                        saved_by: savedBy
+                    }
+                );
+            }
+        });
 
         res.json({ message: 'Saved successfully', batch_id: batchId, count: records.length });
     } catch (err) {
@@ -475,34 +501,50 @@ export const saveTargetPayroll = async (req: AuthRequest, res: Response) => {
     const savedBy = req.user?.id ?? null;
 
     try {
-        for (const record of records) {
-            await execute(
-                `INSERT INTO payroll_saved_records (
-                    batch_id, site_no, site_name, staff_id, epf_number, staff_name,
-                    date_from, date_to, sum_count, target_count, extra_units, extra_payment, extra_unit_rate, saved_by
-                ) VALUES (
-                    :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
-                    :date_from, :date_to,
-                    :sum_count, :target_count, :extra_units, :extra_payment, :extra_unit_rate, :saved_by
-                )`,
-                {
-                    batch_id: batchId,
-                    site_no: record.SITE_NO || site_no,
-                    site_name: record.SITE_NAME || null,
-                    staff_id: record.STAFF_ID,
-                    epf_number: record.EPF_NUMBER || null,
-                    staff_name: record.NAME,
-                    date_from: String(date_from),
-                    date_to: String(date_to),
-                    sum_count: record.SUM_COUNT || record.sum_count || 0,
-                    target_count: record.target_count || 0,
-                    extra_units: record.extra_units || 0,
-                    extra_payment: record.extra_payment || 0,
-                    extra_unit_rate: EXTRA_UNIT_RATE,
-                    saved_by: savedBy
-                }
-            );
+        // Reject duplicate saves — a second batch for the same site+period
+        // would double-count target OT in invoices.
+        const dup = await execute<any>(
+            `SELECT 1 FROM payroll_saved_records
+             WHERE site_no = :site_no AND date_from = :date_from AND date_to = :date_to
+             LIMIT 1`,
+            { site_no: String(site_no), date_from: String(date_from), date_to: String(date_to) }
+        );
+        if (dup.rows && dup.rows.length > 0) {
+            return res.status(409).json({
+                message: 'A saved batch already exists for this site and period. Delete the existing batch first.',
+            });
         }
+
+        await withTransaction(async (exec) => {
+            for (const record of records) {
+                await exec(
+                    `INSERT INTO payroll_saved_records (
+                        batch_id, site_no, site_name, staff_id, epf_number, staff_name,
+                        date_from, date_to, sum_count, target_count, extra_units, extra_payment, extra_unit_rate, saved_by
+                    ) VALUES (
+                        :batch_id, :site_no, :site_name, :staff_id, :epf_number, :staff_name,
+                        :date_from, :date_to,
+                        :sum_count, :target_count, :extra_units, :extra_payment, :extra_unit_rate, :saved_by
+                    )`,
+                    {
+                        batch_id: batchId,
+                        site_no: record.SITE_NO || site_no,
+                        site_name: record.SITE_NAME || null,
+                        staff_id: record.STAFF_ID,
+                        epf_number: record.EPF_NUMBER || null,
+                        staff_name: record.NAME,
+                        date_from: String(date_from),
+                        date_to: String(date_to),
+                        sum_count: record.SUM_COUNT || record.sum_count || 0,
+                        target_count: record.target_count || 0,
+                        extra_units: record.extra_units || 0,
+                        extra_payment: record.extra_payment || 0,
+                        extra_unit_rate: EXTRA_UNIT_RATE,
+                        saved_by: savedBy
+                    }
+                );
+            }
+        });
 
         res.json({ message: 'Saved successfully', batch_id: batchId, count: records.length });
     } catch (err) {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import type { Site, InvoiceRecord, InvoicePreview, InvoiceCostFactor, InvoiceOutsourceStaffLine } from '../types';
+import { localDateStr } from '../lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -479,8 +480,8 @@ const Invoices: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     <button type="button" onClick={() => {
-                        const today = new Date().toISOString().slice(0, 10);
-                        const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+                        const today = localDateStr();
+                        const firstOfMonth = localDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
                         setBulkFrom(firstOfMonth);
                         setBulkTo(today);
                         setBulkModalOpen(true);

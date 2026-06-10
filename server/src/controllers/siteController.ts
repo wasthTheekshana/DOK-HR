@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { execute } from '../db/dbUtils';
+import { execute, withTransaction } from '../db/dbUtils';
 
 export const getSites = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
@@ -109,52 +109,56 @@ export const getSiteById = async (req: Request, res: Response) => {
 export const createSite = async (req: Request, res: Response) => {
     const { site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
-        const siteResult = await execute<any>(
-            `INSERT INTO sites (site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
-             VALUES (:site_no, :name, :supervisor_id, :responsible_person_id, :task_invoice_price, :daily_target, :ot_type, :status, :service_type, :site_type)
-             RETURNING id`,
-            {
-                site_no,
-                name,
-                supervisor_id: supervisor_id || null,
-                responsible_person_id: responsible_person_id || null,
-                task_invoice_price: task_invoice_price || 0,
-                daily_target: daily_target || 0,
-                ot_type: ot_type || 'time_based',
-                status: status || 'active',
-                service_type: service_type || null,
-                site_type: site_type || null,
-            }
-        );
+        const newSiteId = await withTransaction(async (exec) => {
+            const siteResult = await exec<any>(
+                `INSERT INTO sites (site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
+                 VALUES (:site_no, :name, :supervisor_id, :responsible_person_id, :task_invoice_price, :daily_target, :ot_type, :status, :service_type, :site_type)
+                 RETURNING id`,
+                {
+                    site_no,
+                    name,
+                    supervisor_id: supervisor_id || null,
+                    responsible_person_id: responsible_person_id || null,
+                    task_invoice_price: task_invoice_price || 0,
+                    daily_target: daily_target || 0,
+                    ot_type: ot_type || 'time_based',
+                    status: status || 'active',
+                    service_type: service_type || null,
+                    site_type: site_type || null,
+                }
+            );
 
-        const newSiteId = siteResult.rows?.[0]?.ID;
+            const siteId = siteResult.rows?.[0]?.ID;
 
-        if (newSiteId && task_types && Array.isArray(task_types) && task_types.length > 0) {
-            for (const task of task_types) {
-                await execute(
-                    `INSERT INTO site_task_types (site_id, task_name, invoice_price) VALUES (:site_id, :task_name, :invoice_price)`,
-                    { site_id: newSiteId, task_name: task.task_name, invoice_price: task.invoice_price }
-                );
-            }
-        }
-
-        if (newSiteId && cost_factors && Array.isArray(cost_factors) && cost_factors.length > 0) {
-            for (const factor of cost_factors) {
-                if (factor.key && factor.key.trim()) {
-                    await execute(
-                        `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :factor_key, :factor_value)`,
-                        { site_id: newSiteId, factor_key: factor.key.trim(), factor_value: factor.value || '' }
+            if (siteId && task_types && Array.isArray(task_types) && task_types.length > 0) {
+                for (const task of task_types) {
+                    await exec(
+                        `INSERT INTO site_task_types (site_id, task_name, invoice_price) VALUES (:site_id, :task_name, :invoice_price)`,
+                        { site_id: siteId, task_name: task.task_name, invoice_price: task.invoice_price }
                     );
                 }
             }
-        }
 
-        if (newSiteId && supervisor_id) {
-            await execute(
-                `UPDATE users SET site_id = :site_id WHERE id = :user_id`,
-                { site_id: newSiteId, user_id: supervisor_id }
-            );
-        }
+            if (siteId && cost_factors && Array.isArray(cost_factors) && cost_factors.length > 0) {
+                for (const factor of cost_factors) {
+                    if (factor.key && factor.key.trim()) {
+                        await exec(
+                            `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :factor_key, :factor_value)`,
+                            { site_id: siteId, factor_key: factor.key.trim(), factor_value: factor.value || '' }
+                        );
+                    }
+                }
+            }
+
+            if (siteId && supervisor_id) {
+                await exec(
+                    `UPDATE users SET site_id = :site_id WHERE id = :user_id`,
+                    { site_id: siteId, user_id: supervisor_id }
+                );
+            }
+
+            return siteId;
+        });
 
         res.status(201).json({ message: 'Site created successfully', id: newSiteId });
     } catch (err) {
@@ -167,61 +171,63 @@ export const updateSite = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
     try {
-        await execute(
-            `UPDATE sites
-             SET name = :name,
-                 supervisor_id = :supervisor_id,
-                 responsible_person_id = :responsible_person_id,
-                 task_invoice_price = :task_invoice_price,
-                 daily_target = :daily_target,
-                 ot_type = :ot_type,
-                 status = :status,
-                 service_type = :service_type,
-                 site_type = :site_type,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = :id`,
-            {
-                name,
-                supervisor_id: supervisor_id || null,
-                responsible_person_id: responsible_person_id || null,
-                task_invoice_price: task_invoice_price || 0,
-                daily_target: daily_target || 0,
-                ot_type: ot_type || 'time_based',
-                status: status || 'active',
-                service_type: service_type || null,
-                site_type: site_type || null,
-                id: String(id)
-            }
-        );
+        await withTransaction(async (exec) => {
+            await exec(
+                `UPDATE sites
+                 SET name = :name,
+                     supervisor_id = :supervisor_id,
+                     responsible_person_id = :responsible_person_id,
+                     task_invoice_price = :task_invoice_price,
+                     daily_target = :daily_target,
+                     ot_type = :ot_type,
+                     status = :status,
+                     service_type = :service_type,
+                     site_type = :site_type,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id`,
+                {
+                    name,
+                    supervisor_id: supervisor_id || null,
+                    responsible_person_id: responsible_person_id || null,
+                    task_invoice_price: task_invoice_price || 0,
+                    daily_target: daily_target || 0,
+                    ot_type: ot_type || 'time_based',
+                    status: status || 'active',
+                    service_type: service_type || null,
+                    site_type: site_type || null,
+                    id: String(id)
+                }
+            );
 
-        if (task_types && Array.isArray(task_types)) {
-            await execute(`DELETE FROM site_task_types WHERE site_id = :id`, { id: String(id) });
-            for (const task of task_types) {
-                await execute(
-                    `INSERT INTO site_task_types (site_id, task_name, invoice_price) VALUES (:site_id, :task_name, :invoice_price)`,
-                    { site_id: Number(id), task_name: task.task_name, invoice_price: task.invoice_price }
-                );
-            }
-        }
-
-        if (cost_factors && Array.isArray(cost_factors)) {
-            await execute(`DELETE FROM cost_varient WHERE site_id = :id`, { id: String(id) });
-            for (const factor of cost_factors) {
-                if (factor.key && factor.key.trim()) {
-                    await execute(
-                        `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :factor_key, :factor_value)`,
-                        { site_id: Number(id), factor_key: factor.key.trim(), factor_value: factor.value || '' }
+            if (task_types && Array.isArray(task_types)) {
+                await exec(`DELETE FROM site_task_types WHERE site_id = :id`, { id: String(id) });
+                for (const task of task_types) {
+                    await exec(
+                        `INSERT INTO site_task_types (site_id, task_name, invoice_price) VALUES (:site_id, :task_name, :invoice_price)`,
+                        { site_id: Number(id), task_name: task.task_name, invoice_price: task.invoice_price }
                     );
                 }
             }
-        }
 
-        if (supervisor_id) {
-            await execute(
-                `UPDATE users SET site_id = :site_id WHERE id = :user_id`,
-                { site_id: Number(id), user_id: supervisor_id }
-            );
-        }
+            if (cost_factors && Array.isArray(cost_factors)) {
+                await exec(`DELETE FROM cost_varient WHERE site_id = :id`, { id: String(id) });
+                for (const factor of cost_factors) {
+                    if (factor.key && factor.key.trim()) {
+                        await exec(
+                            `INSERT INTO cost_varient (site_id, factor_key, factor_value) VALUES (:site_id, :factor_key, :factor_value)`,
+                            { site_id: Number(id), factor_key: factor.key.trim(), factor_value: factor.value || '' }
+                        );
+                    }
+                }
+            }
+
+            if (supervisor_id) {
+                await exec(
+                    `UPDATE users SET site_id = :site_id WHERE id = :user_id`,
+                    { site_id: Number(id), user_id: supervisor_id }
+                );
+            }
+        });
 
         res.json({ message: 'Site updated successfully' });
     } catch (err) {

@@ -50,10 +50,26 @@ export const getAttendance = async (req: Request, res: Response) => {
 
 export const createAttendance = async (req: Request, res: Response) => {
     const { site_id, staff_id, attendance_date, in_time, out_time } = req.body;
+    const userRole = (req as any).user.role;
+    const userId   = (req as any).user.id;
     try {
+        // Supervisors can only record attendance for their own sites
+        if (userRole === 'supervisor') {
+            const siteCheck = await execute<any>(
+                `SELECT 1 FROM sites WHERE id = :site_id AND supervisor_id = :userId`,
+                { site_id, userId }
+            );
+            if (!siteCheck.rows || siteCheck.rows.length === 0) {
+                return res.status(403).json({ message: 'Forbidden: you can only record attendance for your own sites' });
+            }
+        }
+
+        // Upsert — re-submitting the same staff/site/date updates times instead of erroring
         await execute(
             `INSERT INTO attendance (site_id, staff_id, attendance_date, in_time, out_time)
-             VALUES (:site_id, :staff_id, :attendance_date, :in_time, :out_time)`,
+             VALUES (:site_id, :staff_id, :attendance_date, :in_time, :out_time)
+             ON CONFLICT (staff_id, site_id, attendance_date) DO UPDATE
+             SET in_time = EXCLUDED.in_time, out_time = EXCLUDED.out_time, updated_at = CURRENT_TIMESTAMP`,
             { site_id, staff_id, attendance_date, in_time, out_time }
         );
         res.status(201).json({ message: 'Attendance recorded' });

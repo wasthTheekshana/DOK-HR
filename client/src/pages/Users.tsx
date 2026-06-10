@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { User, Site } from '../types';
+import { localDateStr } from '../lib/utils';
 import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff, ArrowRightLeft, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -520,7 +521,7 @@ const Users: React.FC = () => {
                                         {assignments.length > 0 && (
                                             <div className="space-y-1.5">
                                                 {assignments.map(a => {
-                                                    const now = new Date().toISOString().slice(0, 10);
+                                                    const now = localDateStr();
                                                     const isActive = a.START_DATE <= now && now <= a.END_DATE;
                                                     return (
                                                         <div key={a.ID} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isActive ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
