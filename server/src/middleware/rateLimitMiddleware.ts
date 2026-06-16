@@ -1,13 +1,13 @@
 import rateLimit from 'express-rate-limit';
 
-// Strict limiter for login — 5 failed attempts per 15 minutes per IP
+// Strict limiter for login — 5 failed attempts per 5 minutes per IP
 export const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 5 * 60 * 1000,
     max: 5,
     skipSuccessfulRequests: true,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { message: 'Too many login attempts. Please try again after 15 minutes.' },
+    message: { message: 'Too many login attempts. Please try again after 5 minutes.' },
 });
 
 // General API limiter — 120 requests per minute per IP
