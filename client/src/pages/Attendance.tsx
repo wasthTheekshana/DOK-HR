@@ -6,6 +6,32 @@ import { format } from 'date-fns';
 import { Calendar, MapPin, Clock, User, CheckCircle, FileText, ClipboardList, BarChart2, AlertCircle, Download, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+function formatBiometricDate(dateStr: string): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return `${m}/${d}/${y} 12:00:00 AM`;
+}
+
+function formatBiometricTime(timeStr: string | null | undefined): string {
+    if (!timeStr) return '00:00:00';
+    const parts = timeStr.split(':');
+    return `${(parts[0] || '00').padStart(2, '0')}:${(parts[1] || '00').padStart(2, '0')}:${(parts[2] || '00').padStart(2, '0')}`;
+}
+
+function buildBiometricRows(data: Attendance[], sessionLabel: string) {
+    const rows: object[] = [];
+    for (const a of data) {
+        const dateCell = formatBiometricDate(String(a.ATTENDANCE_DATE).slice(0, 10));
+        const empNo = (a as any).EPF_NUMBER || '';
+        if (a.IN_TIME) {
+            rows.push({ EmployeeNo: empNo, Session: sessionLabel, Date: dateCell, Time: formatBiometricTime(a.IN_TIME), Status: 'CheckIn' });
+        }
+        if (a.OUT_TIME) {
+            rows.push({ EmployeeNo: empNo, Session: sessionLabel, Date: dateCell, Time: formatBiometricTime(a.OUT_TIME), Status: 'CheckOut' });
+        }
+    }
+    return rows;
+}
+
 const AttendancePage: React.FC = () => {
     const { role, user: authUser } = useAuth();
     const isStaff = role === 'staff';
@@ -18,6 +44,7 @@ const AttendancePage: React.FC = () => {
     const [siteFilter, setSiteFilter] = useState('');
     const [dateFrom, setDateFrom] = useState(format(new Date(new Date().setMonth(new Date().getMonth() - 1, 1)), 'yyyy-MM-dd'));
     const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [downloadingAll, setDownloadingAll] = useState(false);
 
     useEffect(() => {
         if (isStaff) return; // staff doesn't need site list
@@ -117,6 +144,35 @@ const AttendancePage: React.FC = () => {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Date Report');
         XLSX.writeFile(wb, `attendance_date_report_${siteFilter}_${dateFrom}_${dateTo}.xlsx`);
+    };
+
+    const downloadBiometricLog = () => {
+        const sessionLabel = format(new Date(dateFrom), 'MMMM yyyy');
+        const rows = buildBiometricRows(attendance, sessionLabel);
+        if (rows.length === 0) return;
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+        XLSX.writeFile(wb, `biometric_log_${siteFilter}_${dateFrom}_${dateTo}.xlsx`);
+    };
+
+    const downloadAllSitesBiometricLog = async () => {
+        setDownloadingAll(true);
+        try {
+            const params: any = { date_from: dateFrom, date_to: dateTo };
+            const res = await api.get('/attendance', { params });
+            const sessionLabel = format(new Date(dateFrom), 'MMMM yyyy');
+            const rows = buildBiometricRows(res.data, sessionLabel);
+            if (rows.length === 0) return;
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+            XLSX.writeFile(wb, `biometric_log_all_sites_${dateFrom}_${dateTo}.xlsx`);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setDownloadingAll(false);
+        }
     };
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -280,11 +336,22 @@ const AttendancePage: React.FC = () => {
                         <>
                             {/* Download bar */}
                             {attendance.length > 0 && (
-                                <div className="flex justify-end px-5 py-3 border-b border-slate-100 bg-slate-50">
+                                <div className="flex flex-wrap gap-2 justify-end px-5 py-3 border-b border-slate-100 bg-slate-50">
                                     <button onClick={downloadLog}
                                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors">
                                         <Download className="w-4 h-4" /> Download Excel
                                     </button>
+                                    <button onClick={downloadBiometricLog}
+                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
+                                        <Download className="w-4 h-4" /> Biometric Log
+                                    </button>
+                                    {!isStaff && (
+                                        <button onClick={downloadAllSitesBiometricLog} disabled={downloadingAll}
+                                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors">
+                                            <Download className="w-4 h-4" />
+                                            {downloadingAll ? 'Downloading…' : 'All Sites Biometric'}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                             <div className="overflow-x-auto">
