@@ -57,6 +57,8 @@ A report that reproduces the manually maintained `docs/JULY.xlsx` workbook insid
 
 New tab `revenue_report` in `client/src/pages/Reports.tsx`, following the existing tab pattern (state per tab, loading spinner, empty state).
 
+**Access:** the feature is for `admin` and `system_admin` only — the tab button is rendered only for those roles (using the page's current-user role, same as other role-gated UI), and the endpoint independently enforces the same restriction server-side.
+
 **Filters row:**
 1. **Date From / Date To** — defaults: first day of current month → today.
 2. **Sites multi-select** — checkbox dropdown of active sites with "All sites" toggle; populated from the page's existing `GET /sites` fetch (which already includes each site's `task_types` with prices).
