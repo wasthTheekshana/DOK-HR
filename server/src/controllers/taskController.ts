@@ -753,7 +753,10 @@ export const getRevenueReport = async (req: Request, res: Response) => {
                     s.site_no                              AS site_no,
                     s.name                                 AS site_name,
                     stt.task_name                          AS task_name,
-                    COALESCE(SUM(COALESCE(t.count, 0)), 0) AS total_count,
+                    CASE WHEN s.ot_type = 'staff_outsource'
+                         THEN COUNT(t.id)
+                         ELSE COALESCE(SUM(COALESCE(t.count, 0)), 0)
+                    END                                     AS total_count,
                     COALESCE(stt.invoice_price, 0)         AS unit_price
              FROM site_task_types stt
              JOIN sites s ON s.id = stt.site_id
@@ -763,7 +766,7 @@ export const getRevenueReport = async (req: Request, res: Response) => {
                AND  t.task_date >= :date_from
                AND  t.task_date <= :date_to
              WHERE 1=1${filters}
-             GROUP BY s.id, s.site_no, s.name, stt.task_name, stt.invoice_price
+             GROUP BY s.id, s.site_no, s.name, s.ot_type, stt.task_name, stt.invoice_price
              ORDER BY s.site_no, stt.task_name`,
             params
         );

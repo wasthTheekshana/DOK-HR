@@ -30,7 +30,7 @@ A report that reproduces the manually maintained `docs/JULY.xlsx` workbook insid
 | `site_ids` | no | comma-separated integers | Omitted = all active sites |
 | `task_names` | no | comma-separated names | Omitted = all task types of the selected sites; matched case-insensitively and trimmed |
 
-**Implementation:** one SQL aggregation in `taskController.ts`, using the same join the invoice generator uses (`invoiceController.ts` — `site_task_types stt LEFT JOIN tasks t ON t.site_id = stt.site_id AND LOWER(TRIM(t.task_description)) = LOWER(TRIM(stt.task_name)) AND t.task_date BETWEEN :date_from AND :date_to`), grouped by site and task name. Counts are summed with `COALESCE(t.count, 0)` so numbers always match invoices.
+**Implementation:** one SQL aggregation in `taskController.ts`, using the same join the invoice generator uses (`invoiceController.ts` — `site_task_types stt LEFT JOIN tasks t ON t.site_id = stt.site_id AND LOWER(TRIM(t.task_description)) = LOWER(TRIM(stt.task_name)) AND t.task_date BETWEEN :date_from AND :date_to`), grouped by site and task name. Counts are summed with `COALESCE(t.count, 0)` so numbers always match invoices. For `staff_outsource` sites, the count is instead the task row count (`COUNT(t.id)`), matching invoice generation.
 
 **Response:**
 
