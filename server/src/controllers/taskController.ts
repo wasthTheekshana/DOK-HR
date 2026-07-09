@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
 import { getDayType, calculateTimeBasedExtra, calculateTimeBasedPayment } from '../utils/payrollUtils';
+import { parseCsvIds, parseCsvNames, validateDateRange, buildRevenueReport, RevenueLineRow } from '../utils/revenueReportUtils';
 
 const DEFAULT_OUT_TIME_TC = '17:00';
 const DEFAULT_IN_TIME_TC  = '08:30';
@@ -703,5 +704,71 @@ export const getWeeklyOperationReport = async (req: Request, res: Response) => {
     } catch (err) {
         console.error('getWeeklyOperationReport error', err);
         res.status(500).json({ message: 'Failed to generate report' });
+    }
+};
+
+// ─── Revenue Report ──────────────────────────────────────────────────────────
+// Counts × unit price per site task type over a date range. Uses the same
+// name-matching join as invoice generation so numbers always match invoices.
+export const getRevenueReport = async (req: Request, res: Response) => {
+    const { date_from, date_to, site_ids, task_names } = req.query;
+
+    const dateErr = validateDateRange(date_from, date_to);
+    if (dateErr) return res.status(400).json({ message: dateErr });
+
+    const siteIds = parseCsvIds(site_ids);
+    if (siteIds !== null && siteIds.length === 0) {
+        return res.status(400).json({ message: 'site_ids contains no valid ids' });
+    }
+    const taskNames = parseCsvNames(task_names);
+    if (taskNames !== null && taskNames.length === 0) {
+        return res.status(400).json({ message: 'task_names contains no valid names' });
+    }
+
+    try {
+        const params: Record<string, any> = { date_from: String(date_from), date_to: String(date_to) };
+        let filters = '';
+        if (siteIds) {
+            const placeholders = siteIds.map((id, i) => {
+                params[`sid${i}`] = id;
+                return `:sid${i}`;
+            }).join(', ');
+            filters += ` AND s.id IN (${placeholders})`;
+        } else {
+            filters += ` AND s.status = 'active'`;
+        }
+        if (taskNames) {
+            const placeholders = taskNames.map((name, i) => {
+                params[`tn${i}`] = name;
+                return `:tn${i}`;
+            }).join(', ');
+            filters += ` AND LOWER(TRIM(stt.task_name)) IN (${placeholders})`;
+        }
+
+        const result = await execute<RevenueLineRow>(
+            `SELECT s.id                                   AS site_id,
+                    s.site_no                              AS site_no,
+                    s.name                                 AS site_name,
+                    stt.task_name                          AS task_name,
+                    COALESCE(SUM(COALESCE(t.count, 0)), 0) AS total_count,
+                    COALESCE(stt.invoice_price, 0)         AS unit_price
+             FROM site_task_types stt
+             JOIN sites s ON s.id = stt.site_id
+             LEFT JOIN tasks t
+                ON  t.site_id = stt.site_id
+               AND  LOWER(TRIM(t.task_description)) = LOWER(TRIM(stt.task_name))
+               AND  t.task_date >= :date_from
+               AND  t.task_date <= :date_to
+             WHERE 1=1${filters}
+             GROUP BY s.id, s.site_no, s.name, stt.task_name, stt.invoice_price
+             ORDER BY s.site_no, stt.task_name`,
+            params
+        );
+
+        const { lines, summary, grand_total } = buildRevenueReport(result.rows || []);
+        res.json({ date_from: String(date_from), date_to: String(date_to), lines, summary, grand_total });
+    } catch (err) {
+        console.error('getRevenueReport error:', err);
+        res.status(500).json({ message: 'Server error' });
     }
 };
