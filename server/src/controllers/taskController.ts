@@ -742,7 +742,10 @@ export const getRevenueReport = async (req: Request, res: Response) => {
                 params[`tn${i}`] = name;
                 return `:tn${i}`;
             }).join(', ');
-            filters += ` AND LOWER(TRIM(stt.task_name)) IN (${placeholders})`;
+            // Postgres TRIM() only strips spaces, but live task_name values carry trailing
+            // tabs/newlines that JS .trim() (used client-side and in parseCsvNames) does strip.
+            // Use REGEXP_REPLACE to match JS whitespace-trim semantics so the filter actually matches.
+            filters += ` AND LOWER(REGEXP_REPLACE(stt.task_name, '^\\s+|\\s+$', '', 'g')) IN (${placeholders})`;
         }
 
         const result = await execute<RevenueLineRow>(

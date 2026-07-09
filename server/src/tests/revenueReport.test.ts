@@ -35,6 +35,10 @@ describe('parseCsvNames', () => {
     it('trims and lowercases names, dropping empty entries', () => {
         expect(parseCsvNames(' Scanning , Data Entry ,,')).toEqual(['scanning', 'data entry']);
     });
+
+    it('strips tabs and other whitespace around names', () => {
+        expect(parseCsvNames('UW \t, Scanning\n')).toEqual(['uw', 'scanning']);
+    });
 });
 
 describe('validateDateRange', () => {
