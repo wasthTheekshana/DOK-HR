@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import type { Site } from '../types';
 import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
-import { FileText, Download, Printer, Filter, Calculator, Clock, ClipboardList, Target, Save, Archive, BarChart2 } from 'lucide-react';
+import { FileText, Download, Printer, Filter, Calculator, Clock, ClipboardList, Target, Save, Archive, BarChart2, Coins } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import RevenueReportTab from '../components/RevenueReportTab';
 
 const Reports: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'daily_count' | 'salary' | 'ot_analysis' | 'custom_ot' | 'weekly_report'>('daily_count');
+    const [activeTab, setActiveTab] = useState<'daily_count' | 'salary' | 'ot_analysis' | 'custom_ot' | 'weekly_report' | 'revenue_report'>('daily_count');
     const [sites, setSites] = useState<Site[]>([]);
     const [selectedSite, setSelectedSite] = useState('');
     const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -432,6 +433,7 @@ const Reports: React.FC = () => {
         { id: 'ot_analysis'   as const, label: 'OT Analysis',     icon: Clock },
         { id: 'custom_ot'     as const, label: 'Custom OT %',     icon: Calculator },
         { id: 'weekly_report' as const, label: 'Weekly Report',   icon: BarChart2 },
+        { id: 'revenue_report' as const, label: 'Revenue Report', icon: Coins },
     ];
 
     const SiteSelect = ({ value, onChange }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void }) => (
@@ -1129,6 +1131,7 @@ const Reports: React.FC = () => {
                     </div>
                 </div>
             )}
+            {activeTab === 'revenue_report' && <RevenueReportTab sites={sites} />}
         </div>
     );
 };
