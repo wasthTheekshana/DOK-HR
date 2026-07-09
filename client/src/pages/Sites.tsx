@@ -3,6 +3,7 @@ import api from '../services/api';
 import type { Site, User } from '../types';
 import { Plus, Edit, Trash2, MapPin, Users as UsersIcon, Target, Clock, X, Briefcase, Building2, DollarSign, Eye, ChevronRight, Search, PowerOff, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { format } from 'date-fns';
 
 const SERVICE_TYPES = ['Physical', 'Scanning', 'Data entry', 'Insurance Policy', 'Staff outsource', 'DMS'];
 const SITE_TYPES    = ['Insurance', 'Bank', 'Hospital', 'Tele', 'Finance'];
@@ -30,6 +31,10 @@ const Sites: React.FC = () => {
     const [viewingSite, setViewingSite]   = useState<Site | null>(null);
     const [editingSite, setEditingSite]   = useState<Site | null>(null);
 
+    // View modal: staff members working on the site (incl. temp assignments today)
+    const [viewStaff, setViewStaff] = useState<User[]>([]);
+    const [viewStaffLoading, setViewStaffLoading] = useState(false);
+
     // Form state
     const [siteNo, setSiteNo]                       = useState('');
     const [name, setName]                           = useState('');
@@ -45,6 +50,26 @@ const Sites: React.FC = () => {
     const [saving, setSaving]                       = useState(false);
 
     useEffect(() => { fetchSites(); fetchSupervisors(); fetchAllUsers(); }, []);
+
+    useEffect(() => {
+        if (!viewingSite) { setViewStaff([]); return; }
+        let cancelled = false;
+        const loadViewStaff = async () => {
+            setViewStaffLoading(true);
+            try {
+                const today = format(new Date(), 'yyyy-MM-dd');
+                const r = await api.get(`/users?site=${viewingSite.ID}&status=active&date=${today}`);
+                if (!cancelled) setViewStaff(r.data || []);
+            } catch (e) {
+                console.error('Failed to load site staff', e);
+                if (!cancelled) setViewStaff([]);
+            } finally {
+                if (!cancelled) setViewStaffLoading(false);
+            }
+        };
+        loadViewStaff();
+        return () => { cancelled = true; };
+    }, [viewingSite?.ID]);
 
     const fetchSites = async () => {
         try { const r = await api.get('/sites'); setSites(r.data); }
@@ -429,6 +454,10 @@ const Sites: React.FC = () => {
             {/* ── View Detail Modal ── */}
             {viewingSite && (() => {
                 const otCfg = OT_TYPE_CONFIG[viewingSite.OT_TYPE as keyof typeof OT_TYPE_CONFIG] || OT_TYPE_CONFIG.time_based;
+                const staffRank = (u: User) => (u.ROLE === 'supervisor' ? 0 : (u.IS_TEMP ? 2 : 1));
+                const sortedViewStaff = [...viewStaff].sort(
+                    (a, b) => staffRank(a) - staffRank(b) || String(a.NAME).localeCompare(String(b.NAME))
+                );
                 return (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setViewingSite(null)} />
@@ -525,6 +554,39 @@ const Sites: React.FC = () => {
                                                 <p className="text-xs text-indigo-500 font-semibold uppercase tracking-wide">Responsible Person</p>
                                                 <p className="font-bold text-slate-800">{viewingSite.RESPONSIBLE_PERSON_NAME}</p>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Staff Members */}
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                                        <UsersIcon className="w-4 h-4 text-emerald-500" />
+                                        Staff Members{!viewStaffLoading && ` (${viewStaff.length})`}
+                                    </h3>
+                                    {viewStaffLoading ? (
+                                        <div className="space-y-2">
+                                            {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 rounded-xl" />)}
+                                        </div>
+                                    ) : viewStaff.length === 0 ? (
+                                        <p className="text-sm text-slate-400 font-medium px-1">No staff assigned</p>
+                                    ) : (
+                                        <div className="rounded-xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                                            {sortedViewStaff.map(u => (
+                                                <div key={u.ID} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/50">
+                                                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-xs shrink-0">
+                                                        {String(u.NAME || '?').charAt(0)}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-bold text-slate-800 text-sm truncate">{u.NAME}</p>
+                                                        <p className="text-xs font-mono text-slate-400">{u.EPF_NUMBER}</p>
+                                                    </div>
+                                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 shrink-0">{u.ROLE}</span>
+                                                    {u.IS_TEMP === 1 && (
+                                                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold uppercase rounded-full shrink-0">Temp</span>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
