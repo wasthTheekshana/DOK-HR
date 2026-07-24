@@ -2,7 +2,7 @@ export interface User {
     ID: number;
     EPF_NUMBER: string;
     NAME: string;
-    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin';
+    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin' | 'project_manager';
     STATUS: 'active' | 'inactive';
     SITE_ID: number | null;
     INACTIVATION_REQUESTED?: number; // 0 or 1
@@ -144,4 +144,53 @@ export interface InvoicePreview {
     total_invoice_price: number;
     outsource_staff_lines?: InvoiceOutsourceStaffLine[];
     outsource_ot_hours?: number;
+}
+
+export interface SitePortfolioEntry {
+    ID: number;
+    SITE_NO: string;
+    NAME: string;
+    PLANNED_START_DATE: string | null;
+    PLANNED_END_DATE: string | null;
+    PLANNED_HEADCOUNT: number | null;
+    ACTUAL_HEADCOUNT: number;
+    UNDERSTAFFED: boolean;
+    CURRENT_STAGE: string | null;
+    MILESTONE_PROGRESS_PCT: number;
+    AVERAGE_KPI: number | null;
+    RISK: 'red' | 'amber' | null;
+}
+
+export interface ProjectMilestone {
+    ID: number;
+    SITE_ID: number;
+    NAME: string;
+    DESCRIPTION: string | null;
+    DUE_DATE: string | null;
+    STATUS: 'not_started' | 'in_progress' | 'done';
+    SORT_ORDER: number;
+    RISK?: 'red' | 'amber' | null;
+}
+
+export interface SitePlan {
+    ID: number;
+    SITE_NO: string;
+    NAME: string;
+    PLANNED_START_DATE: string | null;
+    PLANNED_END_DATE: string | null;
+    PLANNED_HEADCOUNT: number | null;
+    MILESTONES: ProjectMilestone[];
+}
+
+export interface StaffKpiScore {
+    STAFF_ID: number;
+    STAFF_NAME: string;
+    AUTO_SCORE: number;
+    PM_SCORE: number | null;
+    COMMENTS: string | null;
+}
+
+export interface KpiHistoryPoint {
+    PERIOD: string;
+    SCORE: number;
 }
