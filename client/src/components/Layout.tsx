@@ -6,7 +6,7 @@ import {
     LayoutDashboard, Users, MapPin, ClipboardList, CalendarCheck,
     FileText, LogOut, Menu, X, ChevronLeft, ChevronRight,
     DollarSign, BarChart3, TrendingUp, Target, UserCog,
-    Eye, EyeOff, Clock, LayoutGrid, PieChart, GitBranch
+    Eye, EyeOff, Clock, LayoutGrid, PieChart, GitBranch, Award
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -27,6 +27,7 @@ const NAV_GROUPS = [
             { to: '/attendance',     label: 'Attendance',      icon: CalendarCheck,   roles: ['admin','supervisor','system_admin','staff'] },
             { to: '/task-summary',   label: 'Task Summary',    icon: LayoutGrid,      roles: ['supervisor'] },
             { to: '/project-planning', label: 'Project Planning', icon: GitBranch,    roles: ['project_manager'] },
+            { to: '/kpi', label: 'Staff KPI', icon: Award, roles: ['project_manager'] },
         ]
     },
     {

@@ -21,6 +21,7 @@ import InvoiceAnalysis from './pages/InvoiceAnalysis';
 import ServiceMindmap from './pages/ServiceMindmap';
 import ExtraUnits from './pages/ExtraUnits';
 import ProjectPlanning from './pages/ProjectPlanning';
+import StaffKpi from './pages/StaffKpi';
 
 const LoadingScreen = () => (
   <div className="flex items-center justify-center h-screen">
@@ -73,6 +74,7 @@ function App() {
             <Route path="service-mindmap" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ServiceMindmap /></RoleProtectedRoute>} />
             <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
             <Route path="project-planning" element={<RoleProtectedRoute allowedRoles={['project_manager']}><ProjectPlanning /></RoleProtectedRoute>} />
+            <Route path="kpi" element={<RoleProtectedRoute allowedRoles={['project_manager']}><StaffKpi /></RoleProtectedRoute>} />
           </Route>
         </Routes>
       </AuthProvider>
