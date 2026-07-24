@@ -194,6 +194,16 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     try {
+        // Project managers may manage staff/supervisor/project_manager accounts, but
+        // not admin/system_admin accounts — staff management, not account takeover.
+        if (userRole === 'project_manager' && !isSelf) {
+            const targetResult = await execute<any>(`SELECT role FROM users WHERE id = :id`, { id: targetId });
+            const targetRole = targetResult.rows?.[0]?.ROLE;
+            if (targetRole === 'admin' || targetRole === 'system_admin') {
+                return res.status(403).json({ message: 'Project managers cannot modify admin accounts' });
+            }
+        }
+
         let updates: string[] = [];
         const params: any = { id: targetId };
 
@@ -232,8 +242,10 @@ export const updateUser = async (req: Request, res: Response) => {
             params.name = req.body.name;
         }
 
-        // Password: privileged users can reset anyone's; self can change own
-        if (req.body.password && (isStaffManager || isSelf)) {
+        // Password: admin/system_admin can reset anyone's; self can change own.
+        // project_manager is excluded — resetting another account's password is
+        // account takeover, not staff management, even for non-admin targets.
+        if (req.body.password && (isAdmin || isSelf)) {
             const hashed = await hashPassword(req.body.password);
             updates.push('password = :password');
             params.password = hashed;

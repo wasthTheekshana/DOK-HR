@@ -21,6 +21,9 @@ import userRoutes from '../routes/userRoutes';
 import taskRoutes from '../routes/taskRoutes';
 import payrollRoutes from '../routes/payrollRoutes';
 import invoiceRoutes from '../routes/invoiceRoutes';
+import { execute } from '../db/dbUtils';
+
+const mockExecute = execute as jest.Mock;
 
 const app = express();
 app.use(express.json());
@@ -37,7 +40,11 @@ app.use('/api/invoices', invoiceRoutes);
 const asPM = () => { (global as any).testUser = { id: 1, role: 'project_manager', site_id: null }; };
 
 describe('project_manager permission wiring', () => {
-    beforeEach(() => { (global as any).testUser = undefined; });
+    beforeEach(() => {
+        (global as any).testUser = undefined;
+        mockExecute.mockReset();
+        mockExecute.mockResolvedValue({ rows: [] });
+    });
 
     test('can create a site', async () => {
         asPM();
@@ -52,6 +59,24 @@ describe('project_manager permission wiring', () => {
         // Must actually apply the change, not silently no-op it (userController.ts has its
         // own isStaffManager check independent of the route's requireRole guard).
         expect(res.body.message).toBe('User updated');
+    });
+
+    test('cannot modify an admin account (blocked before any field is applied)', async () => {
+        asPM();
+        mockExecute.mockResolvedValueOnce({ rows: [{ ROLE: 'admin' }] }); // target-role lookup
+        const res = await request(app).patch('/api/users/2').send({ site_id: 5 });
+        expect(res.status).toBe(403);
+    });
+
+    test('cannot reset another user\'s password (only status/site_id/salary are staff management)', async () => {
+        asPM();
+        const res = await request(app).patch('/api/users/10').send({ password: 'newpass123', site_id: 2 });
+        expect(res.status).toBe(200);
+        // site_id must still apply, but password must be silently dropped, not persisted.
+        const updateCall = mockExecute.mock.calls.find((c: any[]) => String(c[0]).includes('UPDATE users SET'));
+        expect(updateCall).toBeDefined();
+        expect(updateCall![0]).toContain('site_id');
+        expect(updateCall![0]).not.toContain('password');
     });
 
     test('cannot create a new user login account', async () => {
