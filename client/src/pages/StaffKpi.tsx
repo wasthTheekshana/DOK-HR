@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import api from '../services/api';
 import type { Site, StaffKpiScore, KpiHistoryPoint } from '../types';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
@@ -42,7 +43,7 @@ const StaffKpi: React.FC = () => {
         try {
             await api.post('/kpi', { staff_id: staffId, site_id: siteId, period, pm_score: pmScore, comments });
             await fetchScores();
-        } catch (e) { console.error(e); } finally { setSaving(null); }
+        } catch (e) { console.error(e); toast.error('Failed to save KPI score'); } finally { setSaving(null); }
     };
 
     return (

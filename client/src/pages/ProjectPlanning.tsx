@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import api from '../services/api';
 import type { SitePortfolioEntry, SitePlan, ProjectMilestone } from '../types';
 import { AlertTriangle, Users, ChevronRight, Plus, Trash2 } from 'lucide-react';
@@ -15,6 +16,12 @@ const ProjectPlanning: React.FC = () => {
     const [msDueDate, setMsDueDate] = useState('');
     const [saving, setSaving] = useState(false);
 
+    // Site plan (headcount / dates) edit form
+    const [planHeadcount, setPlanHeadcount] = useState('');
+    const [planStartDate, setPlanStartDate] = useState('');
+    const [planEndDate, setPlanEndDate] = useState('');
+    const [savingPlan, setSavingPlan] = useState(false);
+
     useEffect(() => { fetchPortfolio(); }, []);
 
     const fetchPortfolio = async () => {
@@ -23,8 +30,13 @@ const ProjectPlanning: React.FC = () => {
     };
 
     const openSite = async (siteId: number) => {
-        try { const r = await api.get(`/project-planning/sites/${siteId}`); setDetail(r.data); }
-        catch (e) { console.error(e); }
+        try {
+            const r = await api.get(`/project-planning/sites/${siteId}`);
+            setDetail(r.data);
+            setPlanHeadcount(r.data.PLANNED_HEADCOUNT != null ? String(r.data.PLANNED_HEADCOUNT) : '');
+            setPlanStartDate(r.data.PLANNED_START_DATE ?? '');
+            setPlanEndDate(r.data.PLANNED_END_DATE ?? '');
+        } catch (e) { console.error(e); }
     };
 
     const addMilestone = async () => {
@@ -39,7 +51,7 @@ const ProjectPlanning: React.FC = () => {
             setMsName(''); setMsDueDate('');
             await openSite(detail.ID);
             await fetchPortfolio();
-        } catch (e) { console.error(e); } finally { setSaving(false); }
+        } catch (e) { console.error(e); toast.error('Failed to add milestone'); } finally { setSaving(false); }
     };
 
     const updateMilestoneStatus = async (milestone: ProjectMilestone, status: string) => {
@@ -48,7 +60,7 @@ const ProjectPlanning: React.FC = () => {
             await api.put(`/project-planning/milestones/${milestone.ID}`, { status });
             await openSite(detail.ID);
             await fetchPortfolio();
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); toast.error('Failed to update milestone status'); }
     };
 
     const deleteMilestone = async (milestoneId: number) => {
@@ -57,7 +69,22 @@ const ProjectPlanning: React.FC = () => {
             await api.delete(`/project-planning/milestones/${milestoneId}`);
             await openSite(detail.ID);
             await fetchPortfolio();
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); toast.error('Failed to delete milestone'); }
+    };
+
+    const saveSitePlan = async () => {
+        if (!detail) return;
+        setSavingPlan(true);
+        try {
+            await api.put(`/project-planning/sites/${detail.ID}`, {
+                planned_start_date: planStartDate || null,
+                planned_end_date: planEndDate || null,
+                planned_headcount: planHeadcount !== '' ? Number(planHeadcount) : null,
+            });
+            await openSite(detail.ID);
+            await fetchPortfolio();
+            toast.success('Site plan updated');
+        } catch (e) { console.error(e); toast.error('Failed to update site plan'); } finally { setSavingPlan(false); }
     };
 
     if (loading) return <div className="p-8 text-center text-slate-400">Loading...</div>;
@@ -68,9 +95,26 @@ const ProjectPlanning: React.FC = () => {
                 <button onClick={() => setDetail(null)} className="text-[13px] text-slate-500 hover:text-slate-700">&larr; Back to portfolio</button>
                 <div className="bg-white rounded-2xl border border-slate-200 p-6">
                     <h2 className="text-lg font-bold text-slate-900">{detail.NAME} <span className="text-slate-400 font-normal">({detail.SITE_NO})</span></h2>
-                    <p className="text-[13px] text-slate-500 mt-1">
-                        Planned headcount: {detail.PLANNED_HEADCOUNT ?? '—'} &middot; {detail.PLANNED_START_DATE ?? '—'} to {detail.PLANNED_END_DATE ?? '—'}
-                    </p>
+                    <div className="flex flex-wrap items-end gap-3 mt-3">
+                        <div>
+                            <label className="form-label">Planned headcount</label>
+                            <input type="number" min={0} value={planHeadcount} onChange={e => setPlanHeadcount(e.target.value)}
+                                className="form-input w-32" placeholder="—" />
+                        </div>
+                        <div>
+                            <label className="form-label">Planned start</label>
+                            <input type="date" value={planStartDate} onChange={e => setPlanStartDate(e.target.value)}
+                                className="form-input w-40" />
+                        </div>
+                        <div>
+                            <label className="form-label">Planned end</label>
+                            <input type="date" value={planEndDate} onChange={e => setPlanEndDate(e.target.value)}
+                                className="form-input w-40" />
+                        </div>
+                        <button onClick={saveSitePlan} disabled={savingPlan} className="btn btn-primary">
+                            {savingPlan ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-200 p-6">

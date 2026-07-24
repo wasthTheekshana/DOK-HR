@@ -47,8 +47,8 @@ const RoleProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: st
   return <>{children}</>;
 };
 
-const ADMIN_ROLES = ['admin', 'system_admin'];
-const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
+const ADMIN_ROLES = ['admin', 'system_admin', 'project_manager'];
+const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor', 'project_manager'];
 
 function App() {
   return (

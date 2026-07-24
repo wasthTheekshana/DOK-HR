@@ -15,7 +15,7 @@ const NAV_GROUPS = [
     {
         label: 'Overview',
         items: [
-            { to: '/',               label: 'Dashboard',       icon: LayoutDashboard, roles: ['admin','supervisor','staff','system_admin'] },
+            { to: '/',               label: 'Dashboard',       icon: LayoutDashboard, roles: ['admin','supervisor','staff','system_admin','project_manager'] },
         ]
     },
     {
