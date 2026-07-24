@@ -69,3 +69,26 @@ export const createAttendanceSchema = z.object({
     in_time:         timeStr,
     out_time:        timeStr,
 });
+
+export const updateSitePlanSchema = z.object({
+    planned_start_date: dateStr.optional().nullable(),
+    planned_end_date:   dateStr.optional().nullable(),
+    planned_headcount:  z.number().int().min(0).optional().nullable(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
+
+export const createMilestoneSchema = z.object({
+    name:        z.string().min(1).max(200),
+    description: z.string().max(1000).optional().nullable(),
+    due_date:    dateStr.optional().nullable(),
+    status:      z.enum(['not_started', 'in_progress', 'done']).optional(),
+    sort_order:  z.number().int().optional(),
+});
+
+export const updateMilestoneSchema = createMilestoneSchema.partial().refine(
+    data => Object.keys(data).length > 0,
+    { message: 'At least one field required' }
+);
+
+export const assignMilestoneSchema = z.object({
+    milestone_id: z.number().int().positive().nullable(),
+});
