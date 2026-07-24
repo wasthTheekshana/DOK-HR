@@ -70,7 +70,7 @@ describe('project_manager permission wiring', () => {
 
     test('can view the daily-summary task report', async () => {
         asPM();
-        const res = await request(app).get('/api/tasks/daily-summary');
+        const res = await request(app).get('/api/tasks/daily-summary?date=2026-07-24');
         expect(res.status).toBe(200);
     });
 
@@ -82,7 +82,7 @@ describe('project_manager permission wiring', () => {
 
     test('can view payroll', async () => {
         asPM();
-        const res = await request(app).get('/api/payroll');
+        const res = await request(app).get('/api/payroll?date_from=2026-07-01&date_to=2026-07-24&ot_type=time_based');
         expect(res.status).toBe(200);
     });
 
