@@ -68,7 +68,7 @@ const StaffKpi: React.FC = () => {
                     </thead>
                     <tbody>
                         {scores.map(s => (
-                            <ScoreRow key={s.STAFF_ID} score={s} history={history[s.STAFF_ID] || []}
+                            <ScoreRow key={`${s.STAFF_ID}-${period}`} score={s} history={history[s.STAFF_ID] || []}
                                 saving={saving === s.STAFF_ID} onSave={(pm, comments) => saveScore(s.STAFF_ID, pm, comments)} />
                         ))}
                         {scores.length === 0 && (
