@@ -47,8 +47,13 @@ const RoleProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: st
   return <>{children}</>;
 };
 
-const ADMIN_ROLES = ['admin', 'system_admin', 'project_manager'];
-const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor', 'project_manager'];
+const ADMIN_ROLES = ['admin', 'system_admin'];
+const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
+// Routes project_manager should reach in addition to the sets above — kept separate
+// so widening PM's access can't silently leak into analytics/task-summary/invoice-analysis,
+// which share ADMIN_ROLES/MANAGER_ROLES today but are explicitly system_admin/admin-only per spec.
+const PM_MANAGER_ROLES = [...MANAGER_ROLES, 'project_manager'];
+const PM_ADMIN_ROLES = [...ADMIN_ROLES, 'project_manager'];
 
 function App() {
   return (
@@ -61,18 +66,18 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="attendance" element={<AttendancePage />} />
-            <Route path="sites" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Sites /></RoleProtectedRoute>} />
-            <Route path="users" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Users /></RoleProtectedRoute>} />
-            <Route path="payroll" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
-            <Route path="reports" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Reports /></RoleProtectedRoute>} />
+            <Route path="sites" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Sites /></RoleProtectedRoute>} />
+            <Route path="users" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Users /></RoleProtectedRoute>} />
+            <Route path="payroll" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
+            <Route path="reports" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Reports /></RoleProtectedRoute>} />
             <Route path="analytics" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Analytics /></RoleProtectedRoute>} />
             <Route path="site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><SitePerformance /></RoleProtectedRoute>} />
             <Route path="time-site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TimeSitePerformance /></RoleProtectedRoute>} />
-            <Route path="invoices" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Invoices /></RoleProtectedRoute>} />
+            <Route path="invoices" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Invoices /></RoleProtectedRoute>} />
             <Route path="task-summary" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TaskSummary /></RoleProtectedRoute>} />
             <Route path="invoice-analysis" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><InvoiceAnalysis /></RoleProtectedRoute>} />
             <Route path="service-mindmap" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ServiceMindmap /></RoleProtectedRoute>} />
-            <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
+            <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
             <Route path="project-planning" element={<RoleProtectedRoute allowedRoles={['project_manager']}><ProjectPlanning /></RoleProtectedRoute>} />
             <Route path="kpi" element={<RoleProtectedRoute allowedRoles={['project_manager']}><StaffKpi /></RoleProtectedRoute>} />
           </Route>
