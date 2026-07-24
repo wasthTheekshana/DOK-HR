@@ -92,3 +92,11 @@ export const updateMilestoneSchema = createMilestoneSchema.partial().refine(
 export const assignMilestoneSchema = z.object({
     milestone_id: z.number().int().positive().nullable(),
 });
+
+export const saveKpiScoreSchema = z.object({
+    staff_id: z.number().int().positive(),
+    site_id:  z.number().int().positive(),
+    period:   z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
+    pm_score: z.number().min(0).max(100),
+    comments: z.string().max(1000).optional().nullable(),
+});
