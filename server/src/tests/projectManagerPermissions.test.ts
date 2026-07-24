@@ -52,6 +52,20 @@ describe('project_manager permission wiring', () => {
         expect(res.status).toBe(201);
     });
 
+    test('cannot assign an admin account as a site supervisor when creating a site', async () => {
+        asPM();
+        mockExecute.mockResolvedValueOnce({ rows: [{ ROLE: 'admin' }] }); // supervisor_id target-role lookup
+        const res = await request(app).post('/api/sites').send({ site_no: 'S2', name: 'Site 2', supervisor_id: 99 });
+        expect(res.status).toBe(403);
+    });
+
+    test('cannot assign an admin account as a site supervisor when updating a site', async () => {
+        asPM();
+        mockExecute.mockResolvedValueOnce({ rows: [{ ROLE: 'system_admin' }] }); // supervisor_id target-role lookup
+        const res = await request(app).put('/api/sites/5').send({ name: 'Site 5', supervisor_id: 99 });
+        expect(res.status).toBe(403);
+    });
+
     test('can update a staff record (site/salary reassignment)', async () => {
         asPM();
         const res = await request(app).patch('/api/users/10').send({ site_id: 2 });
