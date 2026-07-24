@@ -12,6 +12,7 @@ async function seed() {
         // 1. Drop tables in reverse FK order
         console.log('Cleaning existing schema...');
         const tables = [
+            'staff_kpi_scores', 'project_milestones',
             'profit_amount', 'cost_varient', 'payroll_saved_records',
             'custom_ot_records', 'site_task_types', 'attendance',
             'tasks', 'users_assignments', 'sites', 'users',
