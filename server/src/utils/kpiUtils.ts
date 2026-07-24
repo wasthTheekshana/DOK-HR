@@ -25,9 +25,9 @@ export type MilestoneRisk = 'red' | 'amber' | null;
 export function computeMilestoneRisk(dueDate: string | null, status: string, today: Date = new Date()): MilestoneRisk {
     if (!dueDate || status === 'done') return null;
 
-    const due = new Date(dueDate);
+    const [dueYear, dueMonth, dueDay] = dueDate.split('-').map(Number);
+    const dueMidnight = new Date(dueYear, dueMonth - 1, dueDay);
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const dueMidnight = new Date(due.getFullYear(), due.getMonth(), due.getDate());
     const diffDays = Math.round((dueMidnight.getTime() - todayMidnight.getTime()) / 86400000);
 
     if (diffDays < 0) return 'red';
