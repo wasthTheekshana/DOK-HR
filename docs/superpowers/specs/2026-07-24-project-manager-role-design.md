@@ -101,9 +101,9 @@ Also add `project_milestones` and `staff_kpi_scores` to the drop list in `server
 ### New Files
 
 **`server/src/controllers/projectPlanningController.ts`**
-- `getSitesPortfolio` — `GET /api/project-planning/sites` (PM only) — returns all sites with: `planned_headcount`, actual headcount (count of `users` with that `site_id`), current stage (derived from milestones), milestone progress % (`done` milestones / total), average KPI for the site's latest period.
+- `getSitesPortfolio` — `GET /api/project-planning/sites` (PM only) — returns all sites with: `planned_headcount`, actual headcount (count of `users` with that `site_id`), current stage (derived from milestones), milestone progress % (`done` milestones / total), average KPI for the site's latest period, `understaffed` flag + gap, and overall site `risk` badge (worst risk among its non-done milestones).
 - `updateSitePlan` — `PUT /api/project-planning/sites/:id` (PM only) — updates `planned_start_date`, `planned_end_date`, `planned_headcount`.
-- `getMilestones` / `createMilestone` / `updateMilestone` / `deleteMilestone` — `GET/POST/PUT/DELETE /api/project-planning/sites/:siteId/milestones` (PM only).
+- `getMilestones` / `createMilestone` / `updateMilestone` / `deleteMilestone` — `GET/POST/PUT/DELETE /api/project-planning/sites/:siteId/milestones` (PM only). `getMilestones` includes a computed `risk` field (`'red' | 'amber' | null`) per milestone based on `due_date` vs. today and `status`.
 - `assignTaskToMilestone` — `PUT /api/project-planning/tasks/:taskId/milestone` (PM only) — sets `tasks.milestone_id`.
 
 **`server/src/routes/projectPlanningRoutes.ts`** — all routes behind `authenticateToken, requireRole(['project_manager'])`.
@@ -111,6 +111,7 @@ Also add `project_milestones` and `staff_kpi_scores` to the drop list in `server
 **`server/src/controllers/kpiController.ts`**
 - `getKpiScores` — `GET /api/kpi?site_id=&period=` (PM only) — returns per-staff `auto_score` (computed live from attendance/task data for the period) alongside any saved `pm_score`/`comments`.
 - `saveKpiScore` — `POST /api/kpi` (PM only) — upserts `pm_score` + `comments` for a `(staff_id, site_id, period)`.
+- `getKpiHistory` — `GET /api/kpi/history?staff_id=&site_id=&limit=6` (PM only) — last N periods' `pm_score` (or `auto_score` fallback) for the trend sparkline.
 
 **`server/src/routes/kpiRoutes.ts`** — behind `authenticateToken, requireRole(['project_manager'])`.
 
@@ -140,12 +141,26 @@ Add two new nav items, visible to `project_manager` only:
 ```
 
 ### New File: `client/src/pages/ProjectPlanning.tsx`
-- **Landing (portfolio) view:** card/table per site — Site Name, Current Stage (derived from milestones), Headcount (actual / planned), Milestone Progress %, Average KPI. Click a site to drill in.
+- **Landing (portfolio) view:** card/table per site — Site Name, Current Stage (derived from milestones), Headcount (actual / planned), Milestone Progress %, Average KPI, **Risk badge** (see below). Click a site to drill in.
 - **Site detail view:** planned dates + headcount editable fields; milestone list (name, due date, status, drag-to-reorder via `sort_order`) with add/edit/delete; tasks-under-milestone assignment (dropdown on each task row pointing at a milestone).
+- **Understaffing banner:** if a site's actual headcount < `planned_headcount`, show an inline warning banner on both the portfolio card and the site detail view (e.g. "Understaffed: 6 / 10").
 
 ### New File: `client/src/pages/StaffKpi.tsx`
 - Site + period (month) selector.
-- Table: Staff Name | Auto Score (computed) | PM Score (editable) | Comments (editable) | Save button per row.
+- Table: Staff Name | Auto Score (computed) | PM Score (editable) | Comments (editable) | **Trend (sparkline)** | Save button per row.
+- Clicking a staff row's trend sparkline expands a small chart of `pm_score` (falling back to `auto_score` where no `pm_score` was set) across the last 6 `period`s.
+
+### Productivity additions
+
+**1. Milestone risk flags** — computed field, no new schema. A milestone is flagged:
+- 🔴 **red** if `due_date` has passed and `status != 'done'`
+- 🟠 **amber** if `due_date` is within 7 days and `status != 'done'`
+- Computed in `getMilestones`/`getSitesPortfolio` responses (`risk: 'red' | 'amber' | null`), not stored — always reflects current date vs. `due_date`.
+- A site's overall risk badge on the portfolio view = the worst risk among its non-done milestones.
+
+**2. Understaffing alerts** — computed field, no new schema. `getSitesPortfolio` compares actual headcount (`COUNT(users) WHERE site_id = :id`) against `planned_headcount` and returns `understaffed: boolean` + the gap. Surfaced as the banner described above; no separate notification/email channel in this pass (see "What This Does NOT Do").
+
+**3. KPI trend view** — no new schema; `staff_kpi_scores` is already keyed by `(staff_id, site_id, period)`. New endpoint `getKpiHistory` — `GET /api/kpi/history?staff_id=&site_id=&limit=6` (PM only) — returns the last N periods' `pm_score` (falling back to `auto_score` when `pm_score` is null) ordered by `period`, for the sparkline.
 
 ### Modified Files
 - **`client/src/App.tsx`** — routes for `/project-planning` and `/kpi`, both `<ProtectedRoute>`.
@@ -183,3 +198,5 @@ Add two new nav items, visible to `project_manager` only:
 - Does not expose KPI scores to staff, supervisors, or even admin/system_admin — PM-eyes-only in v1.
 - Does not automate KPI scoring on a schedule — `auto_score` is computed on-demand when PM opens the screen for a period, not via a background job.
 - Does not modify any existing table's existing columns or existing rows — all schema changes are additive.
+- Does not send notifications, emails, or digests for risk flags or understaffing — these are surfaced only when PM views the portfolio/site screens, no push channel in v1.
+- Milestone risk and understaffing flags are computed on read (not stored, not scheduled) — there is no background job scanning for at-risk sites.
