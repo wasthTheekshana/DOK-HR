@@ -1091,6 +1091,12 @@ git commit -m "feat: add KPI scoring controller and routes for PM role"
 - Consumes: `projectPlanningRoutes` (Task 4), `kpiRoutes` (Task 5).
 - Produces: nothing new consumed by later tasks — this is the permission wiring described in the spec's Roles & Permissions table.
 
+**Post-implementation addendum (found by an automated security review after this task's original implementation landed):** widening the `name`/`password` gates from `isPrivileged` to `isStaffManager` as originally written below, without also scoping which *target* account a `project_manager` can act on, let a PM reset any account's password (including admin/system_admin) and edit admin accounts' status/site_id/salary/epf_number — a privilege-escalation path the spec never intended (PM is explicitly blocked from account management). The actual implementation includes two additional fixes beyond what's shown in this task's original steps:
+- `password` stays gated on `(isAdmin || isSelf)` only — `project_manager` never gets it, matching how `role` changes are already `isAdmin`-only.
+- Before any field is applied, a `project_manager` (non-self) request 403s if the target user's current role is `admin` or `system_admin` (one extra `SELECT role FROM users WHERE id = :id` lookup at the top of the `try` block).
+
+Both are covered by additional tests in `projectManagerPermissions.test.ts`. If executing this plan fresh, apply this addendum as part of Step 4b below rather than following its `password` line literally.
+
 - [ ] **Step 1: Write the failing permission test**
 
 Create `server/src/tests/projectManagerPermissions.test.ts`:
