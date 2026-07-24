@@ -8,10 +8,10 @@ const router = Router();
 
 router.use(authenticateToken);
 
-router.get('/', requireRole(['admin', 'supervisor', 'staff', 'system_admin']), getUsers);
+router.get('/', requireRole(['admin', 'supervisor', 'staff', 'system_admin', 'project_manager']), getUsers);
 router.get('/:id', getUserById);
 router.post('/', requireRole(['admin', 'system_admin']), validateBody(createUserSchema), createUser);
-router.patch('/:id', requireRole(['admin', 'supervisor', 'system_admin']), validateBody(updateUserSchema), updateUser);
+router.patch('/:id', requireRole(['admin', 'supervisor', 'system_admin', 'project_manager']), validateBody(updateUserSchema), updateUser);
 router.delete('/:id', requireRole(['admin', 'system_admin']), deleteUser);
 
 export default router;

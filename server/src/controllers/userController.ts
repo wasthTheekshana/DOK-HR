@@ -180,7 +180,8 @@ export const updateUser = async (req: Request, res: Response) => {
     const callerId = String((req as any).user.id);
     const targetId = String(id);
     const isSelf = callerId === targetId;
-    const isPrivileged = userRole === 'admin' || userRole === 'system_admin';
+    const isAdmin = userRole === 'admin' || userRole === 'system_admin';
+    const isStaffManager = isAdmin || userRole === 'project_manager';
 
     // Supervisor Restriction
     if (userRole === 'supervisor') {
@@ -196,8 +197,8 @@ export const updateUser = async (req: Request, res: Response) => {
         let updates: string[] = [];
         const params: any = { id: targetId };
 
-        // Admin / system_admin fields
-        if (isPrivileged) {
+        // Admin / system_admin / project_manager fields
+        if (isStaffManager) {
             if (status) {
                 updates.push('status = :status');
                 params.status = status;
@@ -207,7 +208,7 @@ export const updateUser = async (req: Request, res: Response) => {
                 }
             }
             if (site_id !== undefined)               { updates.push('site_id = :site_id');             params.site_id = site_id; }
-            if (role)                                { updates.push('role = :role');                   params.role = role; }
+            if (isAdmin && role)                     { updates.push('role = :role');                   params.role = role; }
             if (req.body.basic_salary !== undefined) { updates.push('basic_salary = :basic_salary');   params.basic_salary = req.body.basic_salary; }
             if (req.body.ot_percentage !== undefined){ updates.push('ot_percentage = :ot_percentage'); params.ot_percentage = req.body.ot_percentage; }
             if (req.body.fix_salary !== undefined)   { updates.push('fix_salary = :fix_salary');       params.fix_salary = req.body.fix_salary; }
@@ -226,13 +227,13 @@ export const updateUser = async (req: Request, res: Response) => {
         }
 
         // Name: privileged users or self
-        if (req.body.name && (isPrivileged || isSelf)) {
+        if (req.body.name && (isStaffManager || isSelf)) {
             updates.push('name = :name');
             params.name = req.body.name;
         }
 
         // Password: privileged users can reset anyone's; self can change own
-        if (req.body.password && (isPrivileged || isSelf)) {
+        if (req.body.password && (isStaffManager || isSelf)) {
             const hashed = await hashPassword(req.body.password);
             updates.push('password = :password');
             params.password = hashed;

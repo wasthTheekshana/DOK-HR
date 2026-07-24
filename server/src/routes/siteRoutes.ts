@@ -10,9 +10,9 @@ router.use(authenticateToken);
 
 router.get('/', getSites);
 router.get('/:id', getSiteById);
-router.post('/', requireRole(['admin', 'system_admin']), validateBody(createSiteSchema), createSite);
-router.put('/:id', requireRole(['admin', 'system_admin']), validateBody(updateSiteSchema), updateSite);
-router.patch('/:id/status', requireRole(['admin', 'system_admin']), patchSiteStatus);
-router.delete('/:id', requireRole(['admin', 'system_admin']), deleteSite);
+router.post('/', requireRole(['admin', 'system_admin', 'project_manager']), validateBody(createSiteSchema), createSite);
+router.put('/:id', requireRole(['admin', 'system_admin', 'project_manager']), validateBody(updateSiteSchema), updateSite);
+router.patch('/:id/status', requireRole(['admin', 'system_admin', 'project_manager']), patchSiteStatus);
+router.delete('/:id', requireRole(['admin', 'system_admin', 'project_manager']), deleteSite);
 
 export default router;

@@ -10,15 +10,15 @@ const router = Router();
 
 router.use(authenticateToken);
 
-router.get('/',                 requireRole(['admin', 'system_admin']), getPayroll);
-router.post('/calculate',       requireRole(['admin']),                 calculatePayroll);
-router.get('/custom-ot-report', requireRole(['admin', 'system_admin']), getCustomOTReport);
-router.post('/custom-ot-save',  requireRole(['admin', 'system_admin']), saveCustomOTReport);
-router.get('/custom-ot-history',requireRole(['admin', 'system_admin']), getCustomOTHistory);
-router.post('/save-target',     requireRole(['admin', 'system_admin']), saveTargetPayroll);
-router.get('/saved-history',    requireRole(['admin', 'system_admin']), getSavedPayrollHistory);
-router.get('/extra-units',      requireRole(['admin', 'system_admin']), getExtraUnitsSummary);
-router.delete('/saved-batch',   requireRole(['admin', 'system_admin']), deleteSavedBatch);
-router.put('/saved-record/:id', requireRole(['admin', 'system_admin']), updateSavedRecord);
+router.get('/',                 requireRole(['admin', 'system_admin', 'project_manager']), getPayroll);
+router.post('/calculate',       requireRole(['admin', 'project_manager']),                 calculatePayroll);
+router.get('/custom-ot-report', requireRole(['admin', 'system_admin', 'project_manager']), getCustomOTReport);
+router.post('/custom-ot-save',  requireRole(['admin', 'system_admin', 'project_manager']), saveCustomOTReport);
+router.get('/custom-ot-history',requireRole(['admin', 'system_admin', 'project_manager']), getCustomOTHistory);
+router.post('/save-target',     requireRole(['admin', 'system_admin', 'project_manager']), saveTargetPayroll);
+router.get('/saved-history',    requireRole(['admin', 'system_admin', 'project_manager']), getSavedPayrollHistory);
+router.get('/extra-units',      requireRole(['admin', 'system_admin', 'project_manager']), getExtraUnitsSummary);
+router.delete('/saved-batch',   requireRole(['admin', 'system_admin', 'project_manager']), deleteSavedBatch);
+router.put('/saved-record/:id', requireRole(['admin', 'system_admin', 'project_manager']), updateSavedRecord);
 
 export default router;

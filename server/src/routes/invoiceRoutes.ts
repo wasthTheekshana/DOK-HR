@@ -8,7 +8,7 @@ import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 const router = Router();
 
 router.use(authenticateToken);
-router.use(requireRole(['admin', 'system_admin']));
+router.use(requireRole(['admin', 'system_admin', 'project_manager']));
 
 router.get('/',               getInvoices);
 router.post('/preview',       previewInvoice);
