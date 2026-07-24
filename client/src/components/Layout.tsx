@@ -26,6 +26,7 @@ const NAV_GROUPS = [
             { to: '/tasks',          label: 'Daily Tasks',     icon: ClipboardList,   roles: ['admin','supervisor','staff'] },
             { to: '/attendance',     label: 'Attendance',      icon: CalendarCheck,   roles: ['admin','supervisor','system_admin','staff'] },
             { to: '/task-summary',   label: 'Task Summary',    icon: LayoutGrid,      roles: ['supervisor'] },
+            { to: '/project-planning', label: 'Project Planning', icon: GitBranch,    roles: ['project_manager'] },
         ]
     },
     {
