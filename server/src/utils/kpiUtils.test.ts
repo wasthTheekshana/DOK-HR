@@ -65,6 +65,12 @@ describe('computeMilestoneRisk', () => {
     test('due more than 7 days away -> not at risk', () => {
         expect(computeMilestoneRisk('2026-08-15', 'not_started', today)).toBeNull();
     });
+
+    // pg returns DATE columns as JS Date objects (UTC midnight), not 'YYYY-MM-DD' strings.
+    test('accepts a Date object (as returned by pg for DATE columns)', () => {
+        expect(computeMilestoneRisk(new Date('2026-07-20T00:00:00.000Z'), 'in_progress', today)).toBe('red');
+        expect(computeMilestoneRisk(new Date('2026-07-30T00:00:00.000Z'), 'not_started', today)).toBe('amber');
+    });
 });
 
 describe('worstRisk', () => {

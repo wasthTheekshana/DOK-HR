@@ -22,11 +22,18 @@ export function computeAutoScore(params: {
 
 export type MilestoneRisk = 'red' | 'amber' | null;
 
-export function computeMilestoneRisk(dueDate: string | null, status: string, today: Date = new Date()): MilestoneRisk {
+export function computeMilestoneRisk(dueDate: string | Date | null, status: string, today: Date = new Date()): MilestoneRisk {
     if (!dueDate || status === 'done') return null;
 
-    const [dueYear, dueMonth, dueDay] = dueDate.split('-').map(Number);
-    const dueMidnight = new Date(dueYear, dueMonth - 1, dueDay);
+    // pg returns DATE columns as JS Date objects, not 'YYYY-MM-DD' strings.
+    let dueMidnight: Date;
+    if (dueDate instanceof Date) {
+        // pg parses DATE as UTC midnight regardless of server timezone; read back with UTC getters.
+        dueMidnight = new Date(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate());
+    } else {
+        const [dueYear, dueMonth, dueDay] = dueDate.split('-').map(Number);
+        dueMidnight = new Date(dueYear, dueMonth - 1, dueDay);
+    }
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const diffDays = Math.round((dueMidnight.getTime() - todayMidnight.getTime()) / 86400000);
 
