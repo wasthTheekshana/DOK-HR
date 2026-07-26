@@ -47,29 +47,29 @@ describe('computeMilestoneRisk', () => {
     const today = new Date('2026-07-24');
 
     test('done milestone is never at risk', () => {
-        expect(computeMilestoneRisk('2026-07-01', 'done', today)).toBeNull();
+        expect(computeMilestoneRisk('2026-07-01', true, today)).toBeNull();
     });
 
     test('no due date is never at risk', () => {
-        expect(computeMilestoneRisk(null, 'in_progress', today)).toBeNull();
+        expect(computeMilestoneRisk(null, false, today)).toBeNull();
     });
 
     test('overdue, not done -> red', () => {
-        expect(computeMilestoneRisk('2026-07-20', 'in_progress', today)).toBe('red');
+        expect(computeMilestoneRisk('2026-07-20', false, today)).toBe('red');
     });
 
     test('due within 7 days, not done -> amber', () => {
-        expect(computeMilestoneRisk('2026-07-30', 'not_started', today)).toBe('amber');
+        expect(computeMilestoneRisk('2026-07-30', false, today)).toBe('amber');
     });
 
     test('due more than 7 days away -> not at risk', () => {
-        expect(computeMilestoneRisk('2026-08-15', 'not_started', today)).toBeNull();
+        expect(computeMilestoneRisk('2026-08-15', false, today)).toBeNull();
     });
 
     // pg returns DATE columns as JS Date objects (UTC midnight), not 'YYYY-MM-DD' strings.
     test('accepts a Date object (as returned by pg for DATE columns)', () => {
-        expect(computeMilestoneRisk(new Date('2026-07-20T00:00:00.000Z'), 'in_progress', today)).toBe('red');
-        expect(computeMilestoneRisk(new Date('2026-07-30T00:00:00.000Z'), 'not_started', today)).toBe('amber');
+        expect(computeMilestoneRisk(new Date('2026-07-20T00:00:00.000Z'), false, today)).toBe('red');
+        expect(computeMilestoneRisk(new Date('2026-07-30T00:00:00.000Z'), false, today)).toBe('amber');
     });
 });
 

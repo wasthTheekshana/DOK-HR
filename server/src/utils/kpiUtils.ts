@@ -22,8 +22,8 @@ export function computeAutoScore(params: {
 
 export type MilestoneRisk = 'red' | 'amber' | null;
 
-export function computeMilestoneRisk(dueDate: string | Date | null, status: string, today: Date = new Date()): MilestoneRisk {
-    if (!dueDate || status === 'done') return null;
+export function computeMilestoneRisk(dueDate: string | Date | null, isDone: boolean, today: Date = new Date()): MilestoneRisk {
+    if (!dueDate || isDone) return null;
 
     // pg returns DATE columns as JS Date objects, not 'YYYY-MM-DD' strings.
     let dueMidnight: Date;
