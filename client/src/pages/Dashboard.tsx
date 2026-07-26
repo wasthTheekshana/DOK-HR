@@ -76,6 +76,10 @@ const Dashboard: React.FC = () => {
     const [bizData, setBizData]     = useState<any>(null);
     const [bizLoading, setBizLoading] = useState(false);
 
+    // Project manager portfolio overview
+    const [pmPortfolio, setPmPortfolio] = useState<any[]>([]);
+    const [pmLoading, setPmLoading]     = useState(false);
+
     // CEO live dashboard
     const [slideIndex, setSlideIndex]         = useState(0);
     const [isPaused,   setIsPaused]           = useState(false);
@@ -137,6 +141,15 @@ const Dashboard: React.FC = () => {
             .catch(e => console.error('biz data error', e))
             .finally(() => setBizLoading(false));
     }, [role, ceoDateRange]);
+
+    useEffect(() => {
+        if (role !== 'project_manager') return;
+        setPmLoading(true);
+        api.get('/project-planning/sites')
+            .then(r => setPmPortfolio(r.data))
+            .catch(e => console.error('pm portfolio error', e))
+            .finally(() => setPmLoading(false));
+    }, [role]);
 
     // Live clock
     useEffect(() => {
@@ -296,6 +309,69 @@ const Dashboard: React.FC = () => {
     }
 
     const flaggedUsers = usersList.filter(u => u.INACTIVATION_REQUESTED);
+
+    if (role === 'project_manager') {
+        const atRiskSites = pmPortfolio.filter((s: any) => s.RISK);
+        const understaffedSites = pmPortfolio.filter((s: any) => s.UNDERSTAFFED);
+
+        const urgentMilestones = pmPortfolio
+            .filter((s: any) => s.RISK)
+            .sort((a: any, b: any) => (a.RISK === 'red' ? 0 : 1) - (b.RISK === 'red' ? 0 : 1));
+
+        if (pmLoading) return <div className="p-8 text-center text-slate-400">Loading...</div>;
+
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900">Project Overview</h1>
+                    <p className="text-slate-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <StatCard label="Total Sites" value={pmPortfolio.length} icon={MapPin} color="text-blue-600" bg="bg-blue-50" onClick={() => navigate('/project-planning')} />
+                    <StatCard label="At-Risk Sites" value={atRiskSites.length} icon={AlertTriangle} color="text-red-600" bg="bg-red-50" onClick={() => navigate('/project-planning')} />
+                    <StatCard label="Understaffed Sites" value={understaffedSites.length} icon={Users} color="text-amber-600" bg="bg-amber-50" onClick={() => navigate('/project-planning')} />
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h2 className="font-bold text-slate-900">Sites Needing Attention</h2>
+                        <button onClick={() => navigate('/project-planning')} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                            View all <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {urgentMilestones.slice(0, 8).map((s: any) => (
+                            <div key={s.ID} onClick={() => navigate('/project-planning')} className="px-5 py-3.5 flex items-center justify-between cursor-pointer hover:bg-slate-50">
+                                <div className="flex items-center gap-2.5">
+                                    <span className={`w-2 h-2 rounded-full ${s.RISK === 'red' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800 leading-none">{s.NAME}</p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Stage: {s.CURRENT_STAGE ?? '—'}</p>
+                                    </div>
+                                </div>
+                                <span className="text-xs font-semibold text-slate-500">{s.MILESTONE_PROGRESS_PCT}% complete</span>
+                            </div>
+                        ))}
+                        {urgentMilestones.length === 0 && (
+                            <p className="px-5 py-8 text-center text-slate-400 text-sm">No sites at risk right now.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button onClick={() => navigate('/project-planning')} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-left hover:border-indigo-300 transition-colors">
+                        <p className="font-bold text-slate-900">Project Planning</p>
+                        <p className="text-xs text-slate-400 mt-1">Manage milestones and site plans</p>
+                    </button>
+                    <button onClick={() => navigate('/kpi')} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-left hover:border-indigo-300 transition-colors">
+                        <p className="font-bold text-slate-900">Staff KPI</p>
+                        <p className="text-xs text-slate-400 mt-1">Score and review staff performance</p>
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // ── System Admin CEO Live Dashboard ──────────────────────────────────────
     if (role === 'system_admin') {
