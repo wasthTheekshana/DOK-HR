@@ -114,7 +114,7 @@ Confirmed via grep that `project_milestones.status` is read/written only in `pro
 
 ## 4. Frontend: Sites Page Fix
 
-`client/src/pages/Sites.tsx` — remove the `(role === 'admin' || role === 'system_admin')` condition around the Invoice Price column/header in the view modal (lines ~598, 605-607, 614-618), so `project_manager` sees the prices it's already permitted to set via the create/edit form. Pure display change, no API or permission change (the API already returns this data to PM).
+`client/src/pages/Sites.tsx` — add `project_manager` to the `(role === 'admin' || role === 'system_admin')` condition around the Invoice Price column/header in the view modal (lines ~598, 605-607, 614-618), so `project_manager` sees the prices it's already permitted to set via the create/edit form. The condition is widened, not removed — supervisors also reach this modal (`Layout.tsx:24`) and must not gain visibility they don't have today. Pure display change, no API or permission change (the API already returns this data to PM).
 
 ---
 
