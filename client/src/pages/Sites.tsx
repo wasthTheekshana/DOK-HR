@@ -255,7 +255,7 @@ const Sites: React.FC = () => {
                             </button>
                         )}
                     </div>
-                    {(role === 'admin' || role === 'system_admin') && (
+                    {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (
                         <button onClick={() => handleOpenForm()} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm shadow-indigo-500/25 text-sm whitespace-nowrap">
                             <Plus className="w-4 h-4" /> Add New Site
                         </button>
@@ -271,7 +271,7 @@ const Sites: React.FC = () => {
                     </div>
                     <h3 className="text-lg font-bold text-slate-700 mb-2">No sites yet</h3>
                     <p className="text-slate-400 text-sm mb-5">Get started by creating your first operational site</p>
-                    {(role === 'admin' || role === 'system_admin') && (
+                    {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (
                         <button onClick={() => handleOpenForm()} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm">
                             <Plus className="w-4 h-4" /> Add First Site
                         </button>
@@ -416,7 +416,7 @@ const Sites: React.FC = () => {
                                                     >
                                                         <Eye className="w-3.5 h-3.5" /> View
                                                     </button>
-                                                    {(role === 'admin' || role === 'system_admin') && (<>
+                                                    {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (<>
                                                         <button
                                                             onClick={() => handleToggleStatus(site)}
                                                             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-semibold ${site.STATUS === 'inactive' ? 'bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
@@ -669,7 +669,7 @@ const Sites: React.FC = () => {
                                     <button onClick={() => setViewingSite(null)} className="flex-1 py-2.5 border-2 border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors text-sm">
                                         Close
                                     </button>
-                                    {(role === 'admin' || role === 'system_admin') && (
+                                    {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (
                                         <button onClick={() => { setViewingSite(null); handleOpenForm(viewingSite); }}
                                             className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2">
                                             <Edit className="w-4 h-4" /> Edit Site
