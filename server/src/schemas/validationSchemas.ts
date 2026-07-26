@@ -80,7 +80,7 @@ export const createMilestoneSchema = z.object({
     name:        z.string().min(1).max(200),
     description: z.string().max(1000).optional().nullable(),
     due_date:    dateStr.optional().nullable(),
-    status:      z.enum(['not_started', 'in_progress', 'done']).optional(),
+    stage_id:    z.number().int().positive().optional(),
     sort_order:  z.number().int().optional(),
 });
 
@@ -88,6 +88,18 @@ export const updateMilestoneSchema = createMilestoneSchema.partial().refine(
     data => Object.keys(data).length > 0,
     { message: 'At least one field required' }
 );
+
+export const createStageSchema = z.object({
+    name: z.string().min(1).max(50),
+});
+
+// is_done only accepts `true` (promote) — demoting the current done-stage is done by
+// promoting a different stage, never by explicitly setting is_done: false.
+export const updateStageSchema = z.object({
+    name:       z.string().min(1).max(50).optional(),
+    sort_order: z.number().int().optional(),
+    is_done:    z.literal(true).optional(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
 
 export const assignMilestoneSchema = z.object({
     milestone_id: z.number().int().positive().nullable(),
