@@ -595,14 +595,14 @@ const Sites: React.FC = () => {
                                 {viewingSite.TASK_TYPES && viewingSite.TASK_TYPES.length > 0 && (
                                     <div>
                                         <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                                            <DollarSign className="w-4 h-4 text-indigo-500" /> Task Types{(role === 'admin' || role === 'system_admin') && ' & Invoice Prices'}
+                                            <DollarSign className="w-4 h-4 text-indigo-500" /> Task Types{(role === 'admin' || role === 'system_admin' || role === 'project_manager') && ' & Invoice Prices'}
                                         </h3>
                                         <div className="rounded-xl overflow-hidden border border-slate-100">
                                             <table className="w-full text-sm">
                                                 <thead>
                                                     <tr className="bg-slate-50 border-b border-slate-100">
                                                         <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Task Type</th>
-                                                        {(role === 'admin' || role === 'system_admin') && (
+                                                        {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (
                                                             <th className="text-right px-4 py-2.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice Price</th>
                                                         )}
                                                     </tr>
@@ -611,7 +611,7 @@ const Sites: React.FC = () => {
                                                     {viewingSite.TASK_TYPES.map((t, idx) => (
                                                         <tr key={idx} className="hover:bg-slate-50/50">
                                                             <td className="px-4 py-2.5 font-medium text-slate-700">{t.TASK_NAME}</td>
-                                                            {(role === 'admin' || role === 'system_admin') && (
+                                                            {(role === 'admin' || role === 'system_admin' || role === 'project_manager') && (
                                                                 <td className="px-4 py-2.5 text-right font-bold text-indigo-600">
                                                                     Rs. {Number(t.INVOICE_PRICE).toLocaleString()}
                                                                 </td>
