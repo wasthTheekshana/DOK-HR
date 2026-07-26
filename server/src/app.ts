@@ -14,6 +14,7 @@ import poyaRoutes from './routes/poyaRoutes';
 import assignmentRoutes from './routes/assignmentRoutes';
 import projectPlanningRoutes from './routes/projectPlanningRoutes';
 import kpiRoutes from './routes/kpiRoutes';
+import stageRoutes from './routes/stageRoutes';
 import { globalLimiter, loginLimiter, heavyLimiter } from './middleware/rateLimitMiddleware';
 
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/poya-days', poyaRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/project-planning', projectPlanningRoutes);
 app.use('/api/kpi', kpiRoutes);
+app.use('/api/milestone-stages', stageRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
