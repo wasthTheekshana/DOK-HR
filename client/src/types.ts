@@ -161,13 +161,22 @@ export interface SitePortfolioEntry {
     RISK: 'red' | 'amber' | null;
 }
 
+export interface MilestoneStage {
+    ID: number;
+    NAME: string;
+    SORT_ORDER: number;
+    IS_DONE: boolean;
+}
+
 export interface ProjectMilestone {
     ID: number;
     SITE_ID: number;
     NAME: string;
     DESCRIPTION: string | null;
     DUE_DATE: string | null;
-    STATUS: 'not_started' | 'in_progress' | 'done';
+    STAGE_ID: number;
+    STAGE_NAME: string;
+    IS_DONE: boolean;
     SORT_ORDER: number;
     RISK?: 'red' | 'amber' | null;
 }
