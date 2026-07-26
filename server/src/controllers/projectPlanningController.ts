@@ -23,8 +23,10 @@ export const getSitesPortfolio = async (req: Request, res: Response) => {
             const idPlaceholders = siteIds.map((_: number, i: number) => `:sid${i}`).join(', ');
 
             const milestonesResult = await execute<any>(
-                `SELECT id, site_id, name, due_date, status, sort_order
-                 FROM project_milestones WHERE site_id IN (${idPlaceholders}) ORDER BY site_id, sort_order`,
+                `SELECT pm.id, pm.site_id, pm.name, pm.due_date, pm.sort_order, pm.stage_id, ms.name AS stage_name, ms.is_done
+                 FROM project_milestones pm
+                 JOIN milestone_stages ms ON ms.id = pm.stage_id
+                 WHERE pm.site_id IN (${idPlaceholders}) ORDER BY pm.site_id, pm.sort_order`,
                 idParams
             );
             milestones = milestonesResult.rows || [];
@@ -42,9 +44,9 @@ export const getSitesPortfolio = async (req: Request, res: Response) => {
         const today = new Date();
         const portfolio = sites.map((site: any) => {
             const siteMilestones = milestones.filter((m: any) => m.SITE_ID === site.ID);
-            const doneCount = siteMilestones.filter((m: any) => m.STATUS === 'done').length;
-            const currentStage = siteMilestones.find((m: any) => m.STATUS !== 'done') || siteMilestones[siteMilestones.length - 1] || null;
-            const risks = siteMilestones.map((m: any) => computeMilestoneRisk(m.DUE_DATE, m.STATUS, today));
+            const doneCount = siteMilestones.filter((m: any) => m.IS_DONE).length;
+            const currentStage = siteMilestones.find((m: any) => !m.IS_DONE) || siteMilestones[siteMilestones.length - 1] || null;
+            const risks = siteMilestones.map((m: any) => computeMilestoneRisk(m.DUE_DATE, m.IS_DONE, today));
             const kpiRow = kpiAverages.find((k: any) => k.SITE_ID === site.ID);
 
             return {
@@ -56,7 +58,7 @@ export const getSitesPortfolio = async (req: Request, res: Response) => {
                 PLANNED_HEADCOUNT: site.PLANNED_HEADCOUNT,
                 ACTUAL_HEADCOUNT: site.ACTUAL_HEADCOUNT,
                 UNDERSTAFFED: site.PLANNED_HEADCOUNT != null && site.ACTUAL_HEADCOUNT < site.PLANNED_HEADCOUNT,
-                CURRENT_STAGE: currentStage ? currentStage.NAME : null,
+                CURRENT_STAGE: currentStage ? currentStage.STAGE_NAME : null,
                 MILESTONE_PROGRESS_PCT: siteMilestones.length > 0 ? Math.round((doneCount / siteMilestones.length) * 100) : 0,
                 AVERAGE_KPI: kpiRow ? Number(kpiRow.AVG_KPI) : null,
                 RISK: worstRisk(risks),
@@ -82,14 +84,16 @@ export const getSitePlan = async (req: Request, res: Response) => {
         }
 
         const milestonesResult = await execute<any>(
-            `SELECT id, site_id, name, description, due_date, status, sort_order
-             FROM project_milestones WHERE site_id = :id ORDER BY sort_order`,
+            `SELECT pm.id, pm.site_id, pm.name, pm.description, pm.due_date, pm.sort_order, pm.stage_id, ms.name AS stage_name, ms.is_done
+             FROM project_milestones pm
+             JOIN milestone_stages ms ON ms.id = pm.stage_id
+             WHERE pm.site_id = :id ORDER BY pm.sort_order`,
             { id: Number(id) }
         );
         const today = new Date();
         const milestones = (milestonesResult.rows || []).map((m: any) => ({
             ...m,
-            RISK: computeMilestoneRisk(m.DUE_DATE, m.STATUS, today),
+            RISK: computeMilestoneRisk(m.DUE_DATE, m.IS_DONE, today),
         }));
 
         res.json({ ...siteResult.rows[0], MILESTONES: milestones });
@@ -126,19 +130,24 @@ export const updateSitePlan = async (req: Request, res: Response) => {
 
 export const createMilestone = async (req: Request, res: Response) => {
     const { siteId } = req.params;
-    const { name, description, due_date, status, sort_order } = req.body;
+    const { name, description, due_date, stage_id, sort_order } = req.body;
     const userId = (req as any).user.id;
     try {
+        let resolvedStageId = stage_id;
+        if (!resolvedStageId) {
+            const defaultStage = await execute<any>(`SELECT id FROM milestone_stages ORDER BY sort_order ASC LIMIT 1`);
+            resolvedStageId = defaultStage.rows[0]?.ID ?? null;
+        }
         const result = await execute<any>(
-            `INSERT INTO project_milestones (site_id, name, description, due_date, status, sort_order, created_by)
-             VALUES (:site_id, :name, :description, :due_date, :status, :sort_order, :created_by)
+            `INSERT INTO project_milestones (site_id, name, description, due_date, stage_id, sort_order, created_by)
+             VALUES (:site_id, :name, :description, :due_date, :stage_id, :sort_order, :created_by)
              RETURNING id`,
             {
                 site_id: Number(siteId),
                 name,
                 description: description ?? null,
                 due_date: due_date ?? null,
-                status: status || 'not_started',
+                stage_id: resolvedStageId,
                 sort_order: sort_order ?? 0,
                 created_by: userId,
             }
@@ -152,21 +161,21 @@ export const createMilestone = async (req: Request, res: Response) => {
 
 export const updateMilestone = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, description, due_date, status, sort_order } = req.body;
+    const { name, description, due_date, stage_id, sort_order } = req.body;
     try {
         await execute(
             `UPDATE project_milestones SET
                 name        = COALESCE(:name, name),
                 description = COALESCE(:description, description),
                 due_date    = COALESCE(:due_date, due_date),
-                status      = COALESCE(:status, status),
+                stage_id    = COALESCE(:stage_id, stage_id),
                 sort_order  = COALESCE(:sort_order, sort_order)
              WHERE id = :id`,
             {
                 name: name ?? null,
                 description: description ?? null,
                 due_date: due_date ?? null,
-                status: status ?? null,
+                stage_id: stage_id ?? null,
                 sort_order: sort_order ?? null,
                 id: Number(id),
             }

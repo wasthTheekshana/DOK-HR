@@ -71,7 +71,7 @@ describe('Milestone risk computed on getSitesPortfolio', () => {
     test('overdue milestone marks the site red', async () => {
         mockExecute
             .mockResolvedValueOnce({ rows: [{ ID: 5, SITE_NO: 'S5', NAME: 'Site 5', PLANNED_HEADCOUNT: null, ACTUAL_HEADCOUNT: 3 }] })
-            .mockResolvedValueOnce({ rows: [{ SITE_ID: 5, ID: 100, NAME: 'M1', DUE_DATE: '2020-01-01', STATUS: 'in_progress', SORT_ORDER: 0 }] })
+            .mockResolvedValueOnce({ rows: [{ SITE_ID: 5, ID: 100, NAME: 'M1', DUE_DATE: '2020-01-01', IS_DONE: false, SORT_ORDER: 0 }] })
             .mockResolvedValueOnce({ rows: [] });
 
         const res = await request(app).get('/api/project-planning/sites');
