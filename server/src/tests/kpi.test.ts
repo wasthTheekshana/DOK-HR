@@ -69,6 +69,47 @@ describe('getKpiScores', () => {
     });
 });
 
+describe('getKpiLeaderboard', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (global as any).testUser = { id: 1, role: 'project_manager' };
+    });
+
+    test('ranks staff by all-time average score across sites', async () => {
+        mockExecute.mockResolvedValueOnce({
+            rows: [
+                { STAFF_ID: 10, STAFF_NAME: 'Staff A', SITE_NAME: 'Site 1', SITE_NO: 'S1', AVG_SCORE: 92.5, MONTHS_SCORED: 4 },
+                { STAFF_ID: 11, STAFF_NAME: 'Staff B', SITE_NAME: 'Site 2', SITE_NO: 'S2', AVG_SCORE: 80, MONTHS_SCORED: 2 },
+            ],
+        });
+
+        const res = await request(app).get('/api/kpi/leaderboard');
+
+        expect(res.status).toBe(200);
+        expect(res.body[0].STAFF_NAME).toBe('Staff A');
+        expect(res.body[0].AVG_SCORE).toBe(92.5);
+        expect(res.body[1].MONTHS_SCORED).toBe(2);
+    });
+
+    test('admin cannot access the leaderboard', async () => {
+        (global as any).testUser = { id: 2, role: 'admin' };
+        const res = await request(app).get('/api/kpi/leaderboard');
+        expect(res.status).toBe(403);
+    });
+
+    test('filters to a single month when period is given', async () => {
+        mockExecute.mockResolvedValueOnce({
+            rows: [{ STAFF_ID: 10, STAFF_NAME: 'Staff A', SITE_NAME: 'Site 1', SITE_NO: 'S1', AVG_SCORE: 88, MONTHS_SCORED: 1 }],
+        });
+
+        const res = await request(app).get('/api/kpi/leaderboard?period=2026-07');
+
+        expect(res.status).toBe(200);
+        expect(mockExecute.mock.calls[0][1]).toMatchObject({ period: '2026-07' });
+        expect(res.body[0].MONTHS_SCORED).toBe(1);
+    });
+});
+
 describe('saveKpiScore', () => {
     beforeEach(() => {
         jest.clearAllMocks();

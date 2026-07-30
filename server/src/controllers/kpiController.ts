@@ -112,6 +112,39 @@ export const saveKpiScore = async (req: Request, res: Response) => {
     }
 };
 
+export const getKpiLeaderboard = async (req: Request, res: Response) => {
+    // No period given -> all-time average across every month a staff member was scored.
+    // A period given -> ranks by that single month's score instead.
+    const period = typeof req.query.period === 'string' && req.query.period ? req.query.period : null;
+    try {
+        const result = await execute<any>(
+            `SELECT u.id AS staff_id, u.name AS staff_name, s.name AS site_name, s.site_no,
+                    AVG(COALESCE(k.pm_score, k.auto_score)) AS avg_score,
+                    COUNT(k.id) AS months_scored
+             FROM staff_kpi_scores k
+             JOIN users u ON u.id = k.staff_id
+             LEFT JOIN sites s ON s.id = u.site_id
+             WHERE u.status = 'active'
+               AND (:period::text IS NULL OR k.period = :period)
+             GROUP BY u.id, u.name, s.name, s.site_no
+             ORDER BY avg_score DESC`,
+            { period }
+        );
+        const leaderboard = (result.rows || []).map((r: any) => ({
+            STAFF_ID: r.STAFF_ID,
+            STAFF_NAME: r.STAFF_NAME,
+            SITE_NAME: r.SITE_NAME,
+            SITE_NO: r.SITE_NO,
+            AVG_SCORE: Number(r.AVG_SCORE),
+            MONTHS_SCORED: Number(r.MONTHS_SCORED),
+        }));
+        res.json(leaderboard);
+    } catch (err) {
+        console.error('getKpiLeaderboard error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 export const getKpiHistory = async (req: Request, res: Response) => {
     const { staff_id, site_id, limit } = req.query;
     if (!staff_id || !site_id) {
