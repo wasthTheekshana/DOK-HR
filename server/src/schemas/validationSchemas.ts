@@ -76,18 +76,10 @@ export const updateSitePlanSchema = z.object({
     planned_headcount:  z.number().int().min(0).optional().nullable(),
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
 
-export const createMilestoneSchema = z.object({
-    name:        z.string().min(1).max(200),
-    description: z.string().max(1000).optional().nullable(),
-    due_date:    dateStr.optional().nullable(),
-    stage_id:    z.number().int().positive().optional(),
-    sort_order:  z.number().int().optional(),
-});
-
-export const updateMilestoneSchema = createMilestoneSchema.partial().refine(
-    data => Object.keys(data).length > 0,
-    { message: 'At least one field required' }
-);
+export const updateSiteStageSchema = z.object({
+    stage_id:         z.number().int().positive().optional(),
+    stage_sort_order: z.number().int().optional(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
 
 export const createStageSchema = z.object({
     name: z.string().min(1).max(50),
@@ -100,10 +92,6 @@ export const updateStageSchema = z.object({
     sort_order: z.number().int().optional(),
     is_done:    z.literal(true).optional(),
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
-
-export const assignMilestoneSchema = z.object({
-    milestone_id: z.number().int().positive().nullable(),
-});
 
 export const saveKpiScoreSchema = z.object({
     staff_id: z.number().int().positive(),

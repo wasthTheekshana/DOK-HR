@@ -69,9 +69,9 @@ export const deleteStage = async (req: Request, res: Response) => {
         if (stageResult.rows[0].IS_DONE) {
             return res.status(409).json({ message: 'Cannot delete the done-stage. Promote another stage to done first.' });
         }
-        const inUseResult = await execute<any>(`SELECT COUNT(*) AS count FROM project_milestones WHERE stage_id = :id`, { id: Number(id) });
+        const inUseResult = await execute<any>(`SELECT COUNT(*) AS count FROM sites WHERE stage_id = :id`, { id: Number(id) });
         if (Number(inUseResult.rows[0].COUNT) > 0) {
-            return res.status(409).json({ message: 'Cannot delete a stage that has milestones assigned to it.' });
+            return res.status(409).json({ message: 'Cannot delete a stage that has projects assigned to it.' });
         }
         await execute(`DELETE FROM milestone_stages WHERE id = :id`, { id: Number(id) });
         res.json({ message: 'Stage deleted' });

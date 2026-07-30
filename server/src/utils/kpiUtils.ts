@@ -20,9 +20,9 @@ export function computeAutoScore(params: {
     return Math.round(attendancePct * 100) / 100;
 }
 
-export type MilestoneRisk = 'red' | 'amber' | null;
+export type DeadlineRisk = 'red' | 'amber' | null;
 
-export function computeMilestoneRisk(dueDate: string | Date | null, isDone: boolean, today: Date = new Date()): MilestoneRisk {
+export function computeDeadlineRisk(dueDate: string | Date | null, isDone: boolean, today: Date = new Date()): DeadlineRisk {
     if (!dueDate || isDone) return null;
 
     // pg returns DATE columns as JS Date objects, not 'YYYY-MM-DD' strings.
@@ -42,7 +42,7 @@ export function computeMilestoneRisk(dueDate: string | Date | null, isDone: bool
     return null;
 }
 
-export function worstRisk(risks: MilestoneRisk[]): MilestoneRisk {
+export function worstRisk(risks: DeadlineRisk[]): DeadlineRisk {
     if (risks.includes('red')) return 'red';
     if (risks.includes('amber')) return 'amber';
     return null;

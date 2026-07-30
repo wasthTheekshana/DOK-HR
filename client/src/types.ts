@@ -155,10 +155,12 @@ export interface SitePortfolioEntry {
     PLANNED_HEADCOUNT: number | null;
     ACTUAL_HEADCOUNT: number;
     UNDERSTAFFED: boolean;
-    CURRENT_STAGE: string | null;
-    MILESTONE_PROGRESS_PCT: number;
+    STAGE_ID: number | null;
+    STAGE_NAME: string | null;
+    STAGE_SORT_ORDER: number;
     AVERAGE_KPI: number | null;
     RISK: 'red' | 'amber' | null;
+    MONTHLY_TARGET_PCT: number | null;
 }
 
 export interface MilestoneStage {
@@ -166,29 +168,6 @@ export interface MilestoneStage {
     NAME: string;
     SORT_ORDER: number;
     IS_DONE: boolean;
-}
-
-export interface ProjectMilestone {
-    ID: number;
-    SITE_ID: number;
-    NAME: string;
-    DESCRIPTION: string | null;
-    DUE_DATE: string | null;
-    STAGE_ID: number;
-    STAGE_NAME: string;
-    IS_DONE: boolean;
-    SORT_ORDER: number;
-    RISK?: 'red' | 'amber' | null;
-}
-
-export interface SitePlan {
-    ID: number;
-    SITE_NO: string;
-    NAME: string;
-    PLANNED_START_DATE: string | null;
-    PLANNED_END_DATE: string | null;
-    PLANNED_HEADCOUNT: number | null;
-    MILESTONES: ProjectMilestone[];
 }
 
 export interface StaffKpiScore {
@@ -202,4 +181,13 @@ export interface StaffKpiScore {
 export interface KpiHistoryPoint {
     PERIOD: string;
     SCORE: number;
+}
+
+export interface KpiLeaderboardEntry {
+    STAFF_ID: number;
+    STAFF_NAME: string;
+    SITE_NAME: string | null;
+    SITE_NO: string | null;
+    AVG_SCORE: number;
+    MONTHS_SCORED: number;
 }

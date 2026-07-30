@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 import { describe, test, expect } from '@jest/globals';
-import { computeAutoScore, daysInMonth, computeMilestoneRisk, worstRisk } from './kpiUtils';
+import { computeAutoScore, daysInMonth, computeDeadlineRisk, worstRisk } from './kpiUtils';
 
 describe('daysInMonth', () => {
     test('returns 31 for a 31-day month', () => {
@@ -43,33 +43,33 @@ describe('computeAutoScore', () => {
     });
 });
 
-describe('computeMilestoneRisk', () => {
+describe('computeDeadlineRisk', () => {
     const today = new Date('2026-07-24');
 
-    test('done milestone is never at risk', () => {
-        expect(computeMilestoneRisk('2026-07-01', true, today)).toBeNull();
+    test('done stage is never at risk', () => {
+        expect(computeDeadlineRisk('2026-07-01', true, today)).toBeNull();
     });
 
     test('no due date is never at risk', () => {
-        expect(computeMilestoneRisk(null, false, today)).toBeNull();
+        expect(computeDeadlineRisk(null, false, today)).toBeNull();
     });
 
     test('overdue, not done -> red', () => {
-        expect(computeMilestoneRisk('2026-07-20', false, today)).toBe('red');
+        expect(computeDeadlineRisk('2026-07-20', false, today)).toBe('red');
     });
 
     test('due within 7 days, not done -> amber', () => {
-        expect(computeMilestoneRisk('2026-07-30', false, today)).toBe('amber');
+        expect(computeDeadlineRisk('2026-07-30', false, today)).toBe('amber');
     });
 
     test('due more than 7 days away -> not at risk', () => {
-        expect(computeMilestoneRisk('2026-08-15', false, today)).toBeNull();
+        expect(computeDeadlineRisk('2026-08-15', false, today)).toBeNull();
     });
 
     // pg returns DATE columns as JS Date objects (UTC midnight), not 'YYYY-MM-DD' strings.
     test('accepts a Date object (as returned by pg for DATE columns)', () => {
-        expect(computeMilestoneRisk(new Date('2026-07-20T00:00:00.000Z'), false, today)).toBe('red');
-        expect(computeMilestoneRisk(new Date('2026-07-30T00:00:00.000Z'), false, today)).toBe('amber');
+        expect(computeDeadlineRisk(new Date('2026-07-20T00:00:00.000Z'), false, today)).toBe('red');
+        expect(computeDeadlineRisk(new Date('2026-07-30T00:00:00.000Z'), false, today)).toBe('amber');
     });
 });
 

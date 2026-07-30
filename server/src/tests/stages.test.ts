@@ -112,7 +112,7 @@ describe('deleteStage guards', () => {
         expect(res.status).toBe(409);
     });
 
-    test('blocks deleting a stage that still has milestones assigned', async () => {
+    test('blocks deleting a stage that still has projects assigned', async () => {
         mockExecute
             .mockResolvedValueOnce({ rows: [{ IS_DONE: false }] })
             .mockResolvedValueOnce({ rows: [{ COUNT: 2 }] });
