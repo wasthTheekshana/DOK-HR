@@ -1,11 +1,11 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import type { Site, User } from '../types';
+import type { Site, User, MilestoneStage, KpiLeaderboardEntry } from '../types';
 import {
     Users, MapPin, ClipboardList, DollarSign, ArrowRight, Plus, UserPlus,
     CheckCircle, XCircle, AlertTriangle, TrendingUp, BarChart3,
-    ShieldAlert, RefreshCw, Activity
+    ShieldAlert, RefreshCw, Activity, GitBranch, Award, Trophy, Medal, Layers
 } from 'lucide-react';
 import { format, startOfMonth, subMonths } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,12 @@ import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip, Cell
 } from 'recharts';
+
+// Mirrors the stage column palette on the Project Planning Kanban board, so a
+// project's color reads the same on both pages. Cycled by stage position; the
+// done stage always gets emerald regardless of its position.
+const PM_STAGE_COLORS = ['#4f46e5', '#0ea5e9', '#8b5cf6', '#f59e0b', '#f43f5e', '#14b8a6'];
+const PM_DONE_COLOR = '#10b981';
 
 // ─── Shared small components ─────────────────────────────────────────────────
 
@@ -79,6 +85,8 @@ const Dashboard: React.FC = () => {
     // Project manager portfolio overview
     const [pmPortfolio, setPmPortfolio] = useState<any[]>([]);
     const [pmLoading, setPmLoading]     = useState(false);
+    const [pmStages, setPmStages]       = useState<MilestoneStage[]>([]);
+    const [pmLeaderboard, setPmLeaderboard] = useState<KpiLeaderboardEntry[]>([]);
 
     // CEO live dashboard
     const [slideIndex, setSlideIndex]         = useState(0);
@@ -145,9 +153,17 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         if (role !== 'project_manager') return;
         setPmLoading(true);
-        api.get('/project-planning/sites')
-            .then(r => setPmPortfolio(r.data))
-            .catch(e => console.error('pm portfolio error', e))
+        Promise.all([
+            api.get('/project-planning/sites'),
+            api.get('/milestone-stages'),
+            api.get('/kpi/leaderboard'),
+        ])
+            .then(([portfolioRes, stagesRes, leaderboardRes]) => {
+                setPmPortfolio(portfolioRes.data);
+                setPmStages(stagesRes.data);
+                setPmLeaderboard(leaderboardRes.data);
+            })
+            .catch(e => console.error('pm dashboard error', e))
             .finally(() => setPmLoading(false));
     }, [role]);
 
@@ -311,63 +327,220 @@ const Dashboard: React.FC = () => {
     const flaggedUsers = usersList.filter(u => u.INACTIVATION_REQUESTED);
 
     if (role === 'project_manager') {
+        if (pmLoading) return <div className="p-8 text-center text-slate-400">Loading...</div>;
+
         const atRiskSites = pmPortfolio.filter((s: any) => s.RISK);
         const understaffedSites = pmPortfolio.filter((s: any) => s.UNDERSTAFFED);
 
-        const urgentMilestones = pmPortfolio
+        const urgentSites = pmPortfolio
             .filter((s: any) => s.RISK)
             .sort((a: any, b: any) => (a.RISK === 'red' ? 0 : 1) - (b.RISK === 'red' ? 0 : 1));
 
-        if (pmLoading) return <div className="p-8 text-center text-slate-400">Loading...</div>;
+        const sortedStages = [...pmStages].sort((a, b) => a.SORT_ORDER - b.SORT_ORDER);
+        const stageDistribution = sortedStages.map((stage, i) => ({
+            name: stage.NAME,
+            count: pmPortfolio.filter((s: any) => s.STAGE_ID === stage.ID).length,
+            fill: stage.IS_DONE ? PM_DONE_COLOR : PM_STAGE_COLORS[i % PM_STAGE_COLORS.length],
+        }));
+        const doneStageIds = new Set(sortedStages.filter(s => s.IS_DONE).map(s => s.ID));
+        const completedCount = pmPortfolio.filter((s: any) => doneStageIds.has(s.STAGE_ID)).length;
+
+        const kpiValues = pmPortfolio.map((s: any) => s.AVERAGE_KPI).filter((v: any) => v != null);
+        const avgCompanyKpi = kpiValues.length > 0 ? kpiValues.reduce((a: number, b: number) => a + b, 0) / kpiValues.length : null;
+
+        const targetSites = pmPortfolio.filter((s: any) => s.MONTHLY_TARGET_PCT != null);
+        const targetAchColor = (pct: number) => pct < 50 ? '#ef4444' : pct < 100 ? '#f59e0b' : '#10b981';
+
+        const topLeaders = pmLeaderboard.slice(0, 3);
+        const LEADER_ICON = [
+            <Trophy key="0" className="w-3.5 h-3.5 text-amber-500" />,
+            <Medal key="1" className="w-3.5 h-3.5 text-slate-400" />,
+            <Medal key="2" className="w-3.5 h-3.5 text-orange-400" />,
+        ];
 
         return (
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <div>
                     <h1 className="text-2xl font-black text-slate-900">Project Overview</h1>
                     <p className="text-slate-500 text-sm mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <StatCard label="Total Sites" value={pmPortfolio.length} icon={MapPin} color="text-blue-600" bg="bg-blue-50" onClick={() => navigate('/project-planning')} />
-                    <StatCard label="At-Risk Sites" value={atRiskSites.length} icon={AlertTriangle} color="text-red-600" bg="bg-red-50" onClick={() => navigate('/project-planning')} />
-                    <StatCard label="Understaffed Sites" value={understaffedSites.length} icon={Users} color="text-amber-600" bg="bg-amber-50" onClick={() => navigate('/project-planning')} />
+                {/* KPI strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {[
+                        { label: 'Total Projects', val: pmPortfolio.length, sub: `${sortedStages.length} stages`, color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', icon: Layers },
+                        { label: 'At-Risk', val: atRiskSites.length, sub: 'overdue or due soon', color: 'text-red-700', bg: 'bg-red-50 border-red-200', icon: AlertTriangle },
+                        { label: 'Understaffed', val: understaffedSites.length, sub: 'below planned headcount', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', icon: Users },
+                        { label: 'Completed', val: completedCount, sub: 'in done stage', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: CheckCircle },
+                        { label: 'Avg Staff KPI', val: avgCompanyKpi != null ? avgCompanyKpi.toFixed(1) : '—', sub: 'across all sites', color: 'text-violet-700', bg: 'bg-violet-50 border-violet-200', icon: Award },
+                    ].map((kpi, i) => (
+                        <div key={i} onClick={() => navigate('/project-planning')}
+                            className={`${kpi.bg} border rounded-2xl p-4 cursor-pointer hover:shadow-sm transition-shadow`}>
+                            <div className="flex items-center justify-between mb-2">
+                                <kpi.icon className={`w-4 h-4 ${kpi.color} opacity-60`} />
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{kpi.label}</p>
+                            </div>
+                            <p className={`text-[20px] font-black ${kpi.color} leading-none`}>{kpi.val}</p>
+                            <p className="text-[10px] text-slate-500 mt-1">{kpi.sub}</p>
+                        </div>
+                    ))}
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h2 className="font-bold text-slate-900">Sites Needing Attention</h2>
-                        <button onClick={() => navigate('/project-planning')} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                            View all <ArrowRight className="w-3.5 h-3.5" />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* Left: charts + attention list */}
+                    <div className="lg:col-span-2 flex flex-col gap-4">
+
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Projects by Stage</h3>
+                                <button onClick={() => navigate('/project-planning')} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                                    Open board <ArrowRight className="w-3 h-3" />
+                                </button>
+                            </div>
+                            {stageDistribution.length === 0 ? (
+                                <div className="flex items-center justify-center h-40 text-slate-400 text-xs">No stages configured yet</div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={180}>
+                                    <BarChart data={stageDistribution} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
+                                        <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                                        <Bar dataKey="count" name="Projects" radius={[4, 4, 0, 0]} barSize={36}>
+                                            {stageDistribution.map((s, i) => <Cell key={i} fill={s.fill} />)}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-4">Monthly Target Achievement</h3>
+                            {targetSites.length === 0 ? (
+                                <div className="flex items-center justify-center h-40 text-slate-400 text-xs">No target-based sites this month</div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={180}>
+                                    <BarChart data={targetSites.map((s: any) => ({ name: s.SITE_NO, site_name: s.NAME, pct: s.MONTHLY_TARGET_PCT }))}
+                                        margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                                        <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
+                                        <Tooltip
+                                            content={({ active, payload }: any) => {
+                                                if (!active || !payload?.length) return null;
+                                                const d = payload[0]?.payload;
+                                                return (
+                                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
+                                                        <p style={{ fontWeight: 700, marginBottom: 4 }}>{d?.site_name}</p>
+                                                        <p>{d?.pct}% of monthly target</p>
+                                                    </div>
+                                                );
+                                            }}
+                                        />
+                                        <Bar dataKey="pct" name="% of target" radius={[4, 4, 0, 0]} barSize={20}>
+                                            {targetSites.map((s: any, i: number) => <Cell key={i} fill={targetAchColor(s.MONTHLY_TARGET_PCT)} />)}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                                <h2 className="font-bold text-slate-900">Sites Needing Attention</h2>
+                                <button onClick={() => navigate('/project-planning')} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                                    View all <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <div className="divide-y divide-slate-50">
+                                {urgentSites.slice(0, 8).map((s: any) => (
+                                    <div key={s.ID} onClick={() => navigate('/project-planning')}
+                                        className={`px-5 py-3.5 flex items-center justify-between cursor-pointer hover:bg-slate-50 border-l-4 ${s.RISK === 'red' ? 'border-l-red-500' : 'border-l-amber-500'}`}>
+                                        <div className="flex items-center gap-2.5">
+                                            <span className={`w-2 h-2 rounded-full ${s.RISK === 'red' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                            <div>
+                                                <p className="text-sm font-semibold text-slate-800 leading-none">{s.NAME}</p>
+                                                <p className="text-[11px] text-slate-400 mt-0.5">Stage: {s.STAGE_NAME ?? '—'}</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs font-semibold text-slate-500">{s.RISK === 'red' ? 'Overdue' : 'Due soon'}</span>
+                                    </div>
+                                ))}
+                                {urgentSites.length === 0 && (
+                                    <p className="px-5 py-8 text-center text-slate-400 text-sm">No sites at risk right now.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: leaderboard + quick links */}
+                    <div className="flex flex-col gap-4">
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Top Performers</h3>
+                                <button onClick={() => navigate('/kpi')} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                                    Leaderboard <ArrowRight className="w-3 h-3" />
+                                </button>
+                            </div>
+                            {topLeaders.length === 0 ? (
+                                <p className="text-[11px] text-slate-400 text-center py-6">No KPI scores recorded yet.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {topLeaders.map((e, i) => (
+                                        <div key={e.STAFF_ID} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50">
+                                            {LEADER_ICON[i]}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[12px] font-semibold text-slate-800 truncate leading-none">{e.STAFF_NAME}</p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{e.SITE_NAME ?? '—'}</p>
+                                            </div>
+                                            <p className="text-[13px] font-black text-slate-700">{e.AVG_SCORE.toFixed(1)}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <button onClick={() => navigate('/project-planning')}
+                            className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-left hover:border-indigo-300 transition-colors flex items-center gap-3">
+                            <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                                <GitBranch className="w-4.5 h-4.5 text-indigo-600" style={{ width: 18, height: 18 }} />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-900 text-sm">Project Planning</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Move projects through stages</p>
+                            </div>
+                        </button>
+                        <button onClick={() => navigate('/kpi')}
+                            className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-left hover:border-indigo-300 transition-colors flex items-center gap-3">
+                            <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center shrink-0">
+                                <Award className="w-4.5 h-4.5 text-violet-600" style={{ width: 18, height: 18 }} />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-900 text-sm">Staff KPI</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Score staff, view leaderboard</p>
+                            </div>
+                        </button>
+                        <button onClick={() => navigate('/sites')}
+                            className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-left hover:border-indigo-300 transition-colors flex items-center gap-3">
+                            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                                <MapPin className="w-4.5 h-4.5 text-blue-600" style={{ width: 18, height: 18 }} />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-900 text-sm">Sites</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Manage site setup & staffing</p>
+                            </div>
+                        </button>
+                        <button onClick={() => navigate('/reports')}
+                            className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 text-left hover:border-indigo-300 transition-colors flex items-center gap-3">
+                            <div className="w-9 h-9 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
+                                <BarChart3 className="w-4.5 h-4.5 text-orange-600" style={{ width: 18, height: 18 }} />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-900 text-sm">Reports</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Operation, OT & target reports</p>
+                            </div>
                         </button>
                     </div>
-                    <div className="divide-y divide-slate-50">
-                        {urgentMilestones.slice(0, 8).map((s: any) => (
-                            <div key={s.ID} onClick={() => navigate('/project-planning')} className="px-5 py-3.5 flex items-center justify-between cursor-pointer hover:bg-slate-50">
-                                <div className="flex items-center gap-2.5">
-                                    <span className={`w-2 h-2 rounded-full ${s.RISK === 'red' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-800 leading-none">{s.NAME}</p>
-                                        <p className="text-[11px] text-slate-400 mt-0.5">Stage: {s.CURRENT_STAGE ?? '—'}</p>
-                                    </div>
-                                </div>
-                                <span className="text-xs font-semibold text-slate-500">{s.MILESTONE_PROGRESS_PCT}% complete</span>
-                            </div>
-                        ))}
-                        {urgentMilestones.length === 0 && (
-                            <p className="px-5 py-8 text-center text-slate-400 text-sm">No sites at risk right now.</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button onClick={() => navigate('/project-planning')} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-left hover:border-indigo-300 transition-colors">
-                        <p className="font-bold text-slate-900">Project Planning</p>
-                        <p className="text-xs text-slate-400 mt-1">Manage milestones and site plans</p>
-                    </button>
-                    <button onClick={() => navigate('/kpi')} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 text-left hover:border-indigo-300 transition-colors">
-                        <p className="font-bold text-slate-900">Staff KPI</p>
-                        <p className="text-xs text-slate-400 mt-1">Score and review staff performance</p>
-                    </button>
                 </div>
             </div>
         );

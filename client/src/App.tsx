@@ -68,16 +68,16 @@ function App() {
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="sites" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Sites /></RoleProtectedRoute>} />
             <Route path="users" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Users /></RoleProtectedRoute>} />
-            <Route path="payroll" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
-            <Route path="reports" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Reports /></RoleProtectedRoute>} />
+            <Route path="payroll" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
+            <Route path="reports" element={<RoleProtectedRoute allowedRoles={['admin', 'project_manager']}><Reports /></RoleProtectedRoute>} />
             <Route path="analytics" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Analytics /></RoleProtectedRoute>} />
             <Route path="site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><SitePerformance /></RoleProtectedRoute>} />
             <Route path="time-site-performance" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TimeSitePerformance /></RoleProtectedRoute>} />
             <Route path="invoices" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><Invoices /></RoleProtectedRoute>} />
             <Route path="task-summary" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><TaskSummary /></RoleProtectedRoute>} />
-            <Route path="invoice-analysis" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><InvoiceAnalysis /></RoleProtectedRoute>} />
+            <Route path="invoice-analysis" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><InvoiceAnalysis /></RoleProtectedRoute>} />
             <Route path="service-mindmap" element={<RoleProtectedRoute allowedRoles={['system_admin']}><ServiceMindmap /></RoleProtectedRoute>} />
-            <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={PM_ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
+            <Route path="extra-units" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><ExtraUnits /></RoleProtectedRoute>} />
             <Route path="project-planning" element={<RoleProtectedRoute allowedRoles={['project_manager']}><ProjectPlanning /></RoleProtectedRoute>} />
             <Route path="kpi" element={<RoleProtectedRoute allowedRoles={['project_manager']}><StaffKpi /></RoleProtectedRoute>} />
           </Route>

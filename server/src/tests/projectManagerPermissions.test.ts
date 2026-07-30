@@ -21,6 +21,7 @@ import userRoutes from '../routes/userRoutes';
 import taskRoutes from '../routes/taskRoutes';
 import payrollRoutes from '../routes/payrollRoutes';
 import invoiceRoutes from '../routes/invoiceRoutes';
+import analyticsRoutes from '../routes/analyticsRoutes';
 import { execute } from '../db/dbUtils';
 
 const mockExecute = execute as jest.Mock;
@@ -36,6 +37,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 const asPM = () => { (global as any).testUser = { id: 1, role: 'project_manager', site_id: null }; };
 
@@ -119,9 +121,27 @@ describe('project_manager permission wiring', () => {
         expect(res.status).toBe(403);
     });
 
-    test('can view payroll', async () => {
+    test('cannot view payroll (Finance nav removed for PM)', async () => {
         asPM();
         const res = await request(app).get('/api/payroll?date_from=2026-07-01&date_to=2026-07-24&ot_type=time_based');
+        expect(res.status).toBe(403);
+    });
+
+    test('cannot view extra-units summary (Finance nav removed for PM)', async () => {
+        asPM();
+        const res = await request(app).get('/api/payroll/extra-units?date_from=2026-07-01&date_to=2026-07-24');
+        expect(res.status).toBe(403);
+    });
+
+    test('can view the weekly operation / target-base reports (Reports page kept for PM)', async () => {
+        asPM();
+        const res = await request(app).get('/api/tasks/target-base-report?date_from=2026-07-01&date_to=2026-07-24');
+        expect(res.status).toBe(200);
+    });
+
+    test('can view custom OT report (used by the Reports page)', async () => {
+        asPM();
+        const res = await request(app).get('/api/payroll/custom-ot-report?date_from=2026-07-01&date_to=2026-07-24');
         expect(res.status).toBe(200);
     });
 
@@ -129,5 +149,17 @@ describe('project_manager permission wiring', () => {
         asPM();
         const res = await request(app).get('/api/invoices');
         expect(res.status).toBe(200);
+    });
+
+    test('can view invoice analysis', async () => {
+        asPM();
+        const res = await request(app).get('/api/analytics/invoice-analysis?date_from=2026-07-01&date_to=2026-07-24');
+        expect(res.status).toBe(200);
+    });
+
+    test('cannot view other admin-only analytics (e.g. site-count-trend)', async () => {
+        asPM();
+        const res = await request(app).get('/api/analytics/site-count-trend');
+        expect(res.status).toBe(403);
     });
 });
