@@ -6,7 +6,7 @@ import {
     LayoutDashboard, Users, MapPin, ClipboardList, CalendarCheck,
     FileText, LogOut, Menu, X, ChevronLeft, ChevronRight,
     DollarSign, BarChart3, TrendingUp, Target, UserCog,
-    Eye, EyeOff, Clock, LayoutGrid, PieChart, GitBranch
+    Eye, EyeOff, Clock, LayoutGrid, PieChart, GitBranch, Award
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -15,17 +15,19 @@ const NAV_GROUPS = [
     {
         label: 'Overview',
         items: [
-            { to: '/',               label: 'Dashboard',       icon: LayoutDashboard, roles: ['admin','supervisor','staff','system_admin'] },
+            { to: '/',               label: 'Dashboard',       icon: LayoutDashboard, roles: ['admin','supervisor','staff','system_admin','project_manager'] },
         ]
     },
     {
         label: 'Management',
         items: [
-            { to: '/sites',          label: 'Sites',           icon: MapPin,          roles: ['admin','supervisor','system_admin'] },
-            { to: '/users',          label: 'Team',            icon: Users,           roles: ['admin','supervisor','system_admin'] },
+            { to: '/sites',          label: 'Sites',           icon: MapPin,          roles: ['admin','supervisor','system_admin','project_manager'] },
+            { to: '/users',          label: 'Team',            icon: Users,           roles: ['admin','supervisor','system_admin','project_manager'] },
             { to: '/tasks',          label: 'Daily Tasks',     icon: ClipboardList,   roles: ['admin','supervisor','staff'] },
             { to: '/attendance',     label: 'Attendance',      icon: CalendarCheck,   roles: ['admin','supervisor','system_admin','staff'] },
             { to: '/task-summary',   label: 'Task Summary',    icon: LayoutGrid,      roles: ['supervisor'] },
+            { to: '/project-planning', label: 'Project Planning', icon: GitBranch,    roles: ['project_manager'] },
+            { to: '/kpi', label: 'Staff KPI', icon: Award, roles: ['project_manager'] },
         ]
     },
     {
@@ -33,9 +35,9 @@ const NAV_GROUPS = [
         items: [
             { to: '/payroll',        label: 'Payroll',         icon: DollarSign,      roles: ['admin','system_admin'] },
             { to: '/extra-units',    label: 'Extra Units',     icon: TrendingUp,      roles: ['admin','system_admin'] },
-            { to: '/invoices',          label: 'Invoices',          icon: FileText,   roles: ['admin','system_admin'] },
-            { to: '/invoice-analysis', label: 'Invoice Analysis',  icon: PieChart,   roles: ['system_admin'] },
-            { to: '/reports',          label: 'Reports',            icon: BarChart3,  roles: ['admin'] },
+            { to: '/invoices',          label: 'Invoices',          icon: FileText,   roles: ['admin','system_admin','project_manager'] },
+            { to: '/invoice-analysis', label: 'Invoice Analysis',  icon: PieChart,   roles: ['system_admin','project_manager'] },
+            { to: '/reports',          label: 'Reports',            icon: BarChart3,  roles: ['admin','project_manager'] },
         ]
     },
     {
@@ -135,10 +137,11 @@ const Layout: React.FC = () => {
 
     /* ── Role badge ── */
     const roleBadge = {
-        admin:        { label: 'Admin',      cls: 'bg-red-500/10 text-red-400' },
-        supervisor:   { label: 'Supervisor', cls: 'bg-violet-500/10 text-violet-400' },
-        system_admin: { label: 'Sys Admin',  cls: 'bg-teal-500/10 text-teal-400' },
-        staff:        { label: 'Staff',      cls: 'bg-blue-500/10 text-blue-400' },
+        admin:           { label: 'Admin',      cls: 'bg-red-500/10 text-red-400' },
+        supervisor:      { label: 'Supervisor', cls: 'bg-violet-500/10 text-violet-400' },
+        system_admin:    { label: 'Sys Admin',  cls: 'bg-teal-500/10 text-teal-400' },
+        staff:           { label: 'Staff',      cls: 'bg-blue-500/10 text-blue-400' },
+        project_manager: { label: 'PM',         cls: 'bg-amber-500/10 text-amber-400' },
     }[role || 'staff'] ?? { label: role, cls: 'bg-slate-500/10 text-slate-400' };
 
     /* ── Sidebar content (shared between desktop + mobile) ── */
@@ -261,12 +264,13 @@ const Layout: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <span className={cn(
                             'px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider',
-                            role === 'admin'        ? 'bg-red-50 text-red-600 border border-red-100' :
-                            role === 'system_admin' ? 'bg-teal-50 text-teal-600 border border-teal-100' :
-                            role === 'supervisor'   ? 'bg-violet-50 text-violet-600 border border-violet-100' :
+                            role === 'admin'           ? 'bg-red-50 text-red-600 border border-red-100' :
+                            role === 'system_admin'    ? 'bg-teal-50 text-teal-600 border border-teal-100' :
+                            role === 'supervisor'      ? 'bg-violet-50 text-violet-600 border border-violet-100' :
+                            role === 'project_manager' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
                             'bg-blue-50 text-blue-600 border border-blue-100'
                         )}>
-                            {role === 'system_admin' ? 'Sys Admin' : role}
+                            {role === 'system_admin' ? 'Sys Admin' : role === 'project_manager' ? 'PM' : role}
                         </span>
                         <button
                             onClick={isPrivileged ? openProfile : undefined}

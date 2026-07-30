@@ -12,7 +12,7 @@ export const createUserSchema = z.object({
     epf_number:    z.string().min(1).max(20),
     name:          z.string().min(1).max(100),
     password:      z.string().min(6),
-    role:          z.enum(['admin', 'supervisor', 'staff', 'system_admin']),
+    role:          z.enum(['admin', 'supervisor', 'staff', 'system_admin', 'project_manager']),
     site_id:       z.number().int().positive().optional().nullable(),
     basic_salary:  z.number().min(0).optional(),
     ot_percentage: z.number().min(0).max(100).optional(),
@@ -23,7 +23,7 @@ export const updateUserSchema = z.object({
     epf_number:             z.string().min(1).max(20).optional(),
     name:                   z.string().min(1).max(100).optional(),
     password:               z.string().min(6).optional(),
-    role:                   z.enum(['admin', 'supervisor', 'staff', 'system_admin']).optional(),
+    role:                   z.enum(['admin', 'supervisor', 'staff', 'system_admin', 'project_manager']).optional(),
     status:                 z.enum(['active', 'inactive']).optional(),
     site_id:                z.number().int().positive().optional().nullable(),
     basic_salary:           z.number().min(0).optional(),
@@ -68,4 +68,35 @@ export const createAttendanceSchema = z.object({
     attendance_date: dateStr,
     in_time:         timeStr,
     out_time:        timeStr,
+});
+
+export const updateSitePlanSchema = z.object({
+    planned_start_date: dateStr.optional().nullable(),
+    planned_end_date:   dateStr.optional().nullable(),
+    planned_headcount:  z.number().int().min(0).optional().nullable(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
+
+export const updateSiteStageSchema = z.object({
+    stage_id:         z.number().int().positive().optional(),
+    stage_sort_order: z.number().int().optional(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
+
+export const createStageSchema = z.object({
+    name: z.string().min(1).max(50),
+});
+
+// is_done only accepts `true` (promote) — demoting the current done-stage is done by
+// promoting a different stage, never by explicitly setting is_done: false.
+export const updateStageSchema = z.object({
+    name:       z.string().min(1).max(50).optional(),
+    sort_order: z.number().int().optional(),
+    is_done:    z.literal(true).optional(),
+}).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' });
+
+export const saveKpiScoreSchema = z.object({
+    staff_id: z.number().int().positive(),
+    site_id:  z.number().int().positive(),
+    period:   z.string().regex(/^\d{4}-\d{2}$/, 'Must be YYYY-MM format'),
+    pm_score: z.number().min(0).max(100),
+    comments: z.string().max(1000).optional().nullable(),
 });

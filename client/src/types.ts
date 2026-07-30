@@ -2,7 +2,7 @@ export interface User {
     ID: number;
     EPF_NUMBER: string;
     NAME: string;
-    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin';
+    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin' | 'project_manager';
     STATUS: 'active' | 'inactive';
     SITE_ID: number | null;
     INACTIVATION_REQUESTED?: number; // 0 or 1
@@ -144,4 +144,50 @@ export interface InvoicePreview {
     total_invoice_price: number;
     outsource_staff_lines?: InvoiceOutsourceStaffLine[];
     outsource_ot_hours?: number;
+}
+
+export interface SitePortfolioEntry {
+    ID: number;
+    SITE_NO: string;
+    NAME: string;
+    PLANNED_START_DATE: string | null;
+    PLANNED_END_DATE: string | null;
+    PLANNED_HEADCOUNT: number | null;
+    ACTUAL_HEADCOUNT: number;
+    UNDERSTAFFED: boolean;
+    STAGE_ID: number | null;
+    STAGE_NAME: string | null;
+    STAGE_SORT_ORDER: number;
+    AVERAGE_KPI: number | null;
+    RISK: 'red' | 'amber' | null;
+    MONTHLY_TARGET_PCT: number | null;
+}
+
+export interface MilestoneStage {
+    ID: number;
+    NAME: string;
+    SORT_ORDER: number;
+    IS_DONE: boolean;
+}
+
+export interface StaffKpiScore {
+    STAFF_ID: number;
+    STAFF_NAME: string;
+    AUTO_SCORE: number;
+    PM_SCORE: number | null;
+    COMMENTS: string | null;
+}
+
+export interface KpiHistoryPoint {
+    PERIOD: string;
+    SCORE: number;
+}
+
+export interface KpiLeaderboardEntry {
+    STAFF_ID: number;
+    STAFF_NAME: string;
+    SITE_NAME: string | null;
+    SITE_NO: string | null;
+    AVG_SCORE: number;
+    MONTHS_SCORED: number;
 }

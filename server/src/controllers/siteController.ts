@@ -108,7 +108,19 @@ export const getSiteById = async (req: Request, res: Response) => {
 
 export const createSite = async (req: Request, res: Response) => {
     const { site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
+    const callerRole = (req as any).user.role;
     try {
+        // A project_manager assigning a supervisor_id here also reassigns that user's
+        // site_id below — block them from doing this to an admin/system_admin account
+        // (same account-takeover boundary enforced in userController.updateUser).
+        if (callerRole === 'project_manager' && supervisor_id) {
+            const targetResult = await execute<any>(`SELECT role FROM users WHERE id = :id`, { id: supervisor_id });
+            const targetRole = targetResult.rows?.[0]?.ROLE;
+            if (targetRole === 'admin' || targetRole === 'system_admin') {
+                return res.status(403).json({ message: 'Project managers cannot assign admin accounts as site supervisor' });
+            }
+        }
+
         const newSiteId = await withTransaction(async (exec) => {
             const siteResult = await exec<any>(
                 `INSERT INTO sites (site_no, name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type)
@@ -170,7 +182,17 @@ export const createSite = async (req: Request, res: Response) => {
 export const updateSite = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, supervisor_id, responsible_person_id, task_invoice_price, daily_target, ot_type, status, service_type, site_type, task_types, cost_factors } = req.body;
+    const callerRole = (req as any).user.role;
     try {
+        // Same account-takeover boundary as createSite — see comment there.
+        if (callerRole === 'project_manager' && supervisor_id) {
+            const targetResult = await execute<any>(`SELECT role FROM users WHERE id = :id`, { id: supervisor_id });
+            const targetRole = targetResult.rows?.[0]?.ROLE;
+            if (targetRole === 'admin' || targetRole === 'system_admin') {
+                return res.status(403).json({ message: 'Project managers cannot assign admin accounts as site supervisor' });
+            }
+        }
+
         await withTransaction(async (exec) => {
             await exec(
                 `UPDATE sites
