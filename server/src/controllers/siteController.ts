@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { execute, withTransaction } from '../db/dbUtils';
+import { getSupervisorAccessibleSiteIds } from '../utils/supervisorAccess';
 
 export const getSites = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
@@ -27,8 +28,12 @@ export const getSites = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (userRole === 'supervisor') {
-            query += ` AND s.supervisor_id = :userId`;
-            params.userId = userId;
+            const accessibleSiteIds = await getSupervisorAccessibleSiteIds(userId);
+            if (accessibleSiteIds.length === 0) return res.json([]);
+            const idParams = Object.fromEntries(accessibleSiteIds.map((id, i) => [`ssid${i}`, id]));
+            const idPlaceholders = accessibleSiteIds.map((_, i) => `:ssid${i}`).join(', ');
+            query += ` AND s.id IN (${idPlaceholders})`;
+            Object.assign(params, idParams);
         }
 
         if (statusFilter && (statusFilter === 'active' || statusFilter === 'inactive')) {

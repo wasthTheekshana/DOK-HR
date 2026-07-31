@@ -2,27 +2,10 @@ import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
 import { getDayType, calculateTimeBasedExtra, calculateTimeBasedPayment } from '../utils/payrollUtils';
 import { parseCsvIds, parseCsvNames, validateDateRange, buildRevenueReport, RevenueLineRow } from '../utils/revenueReportUtils';
+import { getSupervisorAccessibleSiteIds } from '../utils/supervisorAccess';
 
 const DEFAULT_OUT_TIME_TC = '17:00';
 const DEFAULT_IN_TIME_TC  = '08:30';
-
-// A supervisor's reach isn't just sites.supervisor_id — it also includes any site they've
-// been given a temporary/permanent assignment to (temporary_assignments), same as the
-// equivalent fix in userController.getUsers.
-async function getSupervisorAccessibleSiteIds(supervisorId: number): Promise<number[]> {
-    const [sitesResult, assignResult] = await Promise.all([
-        execute<any>(`SELECT id FROM sites WHERE supervisor_id = :id`, { id: supervisorId }),
-        execute<any>(
-            `SELECT site_id FROM temporary_assignments
-             WHERE staff_id = :id AND CURRENT_DATE >= start_date AND (end_date IS NULL OR CURRENT_DATE <= end_date)`,
-            { id: supervisorId }
-        ),
-    ]);
-    return Array.from(new Set([
-        ...(sitesResult.rows?.map((r: any) => r.ID) || []),
-        ...(assignResult.rows?.map((r: any) => r.SITE_ID) || []),
-    ]));
-}
 
 // Returns true when dateStr is strictly before today (local server date).
 function isBackdate(dateStr: string): boolean {

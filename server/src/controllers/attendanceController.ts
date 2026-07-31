@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { execute } from '../db/dbUtils';
+import { getSupervisorAccessibleSiteIds } from '../utils/supervisorAccess';
 
 export const getAttendance = async (req: Request, res: Response) => {
     const { site_no, date_from, date_to } = req.query;
@@ -18,8 +19,12 @@ export const getAttendance = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (userRole === 'supervisor') {
-            query += ` AND s.supervisor_id = :userId`;
-            params.userId = userId;
+            const accessibleSiteIds = await getSupervisorAccessibleSiteIds(userId);
+            if (accessibleSiteIds.length === 0) return res.json([]);
+            const idParams = Object.fromEntries(accessibleSiteIds.map((id, i) => [`ssid${i}`, id]));
+            const idPlaceholders = accessibleSiteIds.map((_, i) => `:ssid${i}`).join(', ');
+            query += ` AND s.id IN (${idPlaceholders})`;
+            Object.assign(params, idParams);
         } else if (userRole === 'staff') {
             query += ` AND a.staff_id = :userId`;
             params.userId = userId;
@@ -53,13 +58,10 @@ export const createAttendance = async (req: Request, res: Response) => {
     const userRole = (req as any).user.role;
     const userId   = (req as any).user.id;
     try {
-        // Supervisors can only record attendance for their own sites
+        // Supervisors can only record attendance for sites they manage or are assigned to
         if (userRole === 'supervisor') {
-            const siteCheck = await execute<any>(
-                `SELECT 1 FROM sites WHERE id = :site_id AND supervisor_id = :userId`,
-                { site_id, userId }
-            );
-            if (!siteCheck.rows || siteCheck.rows.length === 0) {
+            const accessibleSiteIds = await getSupervisorAccessibleSiteIds(userId);
+            if (!accessibleSiteIds.includes(Number(site_id))) {
                 return res.status(403).json({ message: 'Forbidden: you can only record attendance for your own sites' });
             }
         }
@@ -96,8 +98,12 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (userRole === 'supervisor') {
-            query += ` AND s.supervisor_id = :userId`;
-            params.userId = userId;
+            const accessibleSiteIds = await getSupervisorAccessibleSiteIds(userId);
+            if (accessibleSiteIds.length === 0) return res.json([]);
+            const idParams = Object.fromEntries(accessibleSiteIds.map((id, i) => [`ssid${i}`, id]));
+            const idPlaceholders = accessibleSiteIds.map((_, i) => `:ssid${i}`).join(', ');
+            query += ` AND s.id IN (${idPlaceholders})`;
+            Object.assign(params, idParams);
         } else if (userRole === 'staff') {
             query += ` AND a.staff_id = :userId`;
             params.userId = userId;
