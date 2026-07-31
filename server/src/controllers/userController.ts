@@ -12,12 +12,25 @@ export const getUsers = async (req: Request, res: Response) => {
         const params: any = {};
 
         if (userRole === 'supervisor') {
-            const sitesResult = await execute<any>(`SELECT id FROM sites WHERE supervisor_id = :id`, [String((req as any).user.id)]);
-            const supervisedSiteIds = sitesResult.rows?.map((r: any) => r.ID) || [];
+            const supervisorId = (req as any).user.id;
+            // A supervisor's reach isn't just sites.supervisor_id — it also includes any
+            // site they've been given a temporary/permanent assignment to (temporary_assignments).
+            const [sitesResult, assignResult] = await Promise.all([
+                execute<any>(`SELECT id FROM sites WHERE supervisor_id = :id`, { id: supervisorId }),
+                execute<any>(
+                    `SELECT site_id FROM temporary_assignments
+                     WHERE staff_id = :id AND CURRENT_DATE >= start_date AND (end_date IS NULL OR CURRENT_DATE <= end_date)`,
+                    { id: supervisorId }
+                ),
+            ]);
+            const accessibleSiteIds = Array.from(new Set([
+                ...(sitesResult.rows?.map((r: any) => r.ID) || []),
+                ...(assignResult.rows?.map((r: any) => r.SITE_ID) || []),
+            ]));
 
-            if (supervisedSiteIds.length > 0) {
-                const idParams = Object.fromEntries(supervisedSiteIds.map((id: number, i: number) => [`sid${i}`, id]));
-                const idPlaceholders = supervisedSiteIds.map((_: number, i: number) => `:sid${i}`).join(', ');
+            if (accessibleSiteIds.length > 0) {
+                const idParams = Object.fromEntries(accessibleSiteIds.map((id: number, i: number) => [`sid${i}`, id]));
+                const idPlaceholders = accessibleSiteIds.map((_: number, i: number) => `:sid${i}`).join(', ');
                 query += ` AND site_id IN (${idPlaceholders})`;
                 Object.assign(params, idParams);
             } else {

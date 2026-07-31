@@ -101,3 +101,40 @@ describe('User Access Control', () => {
         expect(sql).not.toContain('AND site_id = :site_id_filter');
     });
 });
+
+describe('Supervisor site access includes temp/permanent assignments', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (global as any).testUser = undefined;
+    });
+
+    test('sees users from a site they are only temp-assigned to, not just their managed site', async () => {
+        (global as any).testUser = { id: 5, role: 'supervisor' };
+        mockExecute
+            .mockResolvedValueOnce({ rows: [{ ID: 10 }] })        // sites they manage
+            .mockResolvedValueOnce({ rows: [{ SITE_ID: 20 }] })   // active temp/permanent assignment
+            .mockResolvedValueOnce({ rows: [{ ID: 99, NAME: 'Helper', SITE_ID: 20 }] }); // main query
+
+        const res = await request(app).get('/api/users?site=20');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].SITE_ID).toBe(20);
+
+        const mainQueryCall = mockExecute.mock.calls[2];
+        expect(mainQueryCall[0]).toContain('site_id IN');
+        expect(mainQueryCall[1]).toMatchObject({ sid0: 10, sid1: 20 });
+    });
+
+    test('returns an empty list when the supervisor has no managed or assigned sites', async () => {
+        (global as any).testUser = { id: 6, role: 'supervisor' };
+        mockExecute
+            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [] });
+
+        const res = await request(app).get('/api/users');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual([]);
+    });
+});

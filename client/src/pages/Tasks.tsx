@@ -50,29 +50,46 @@ const Tasks: React.FC = () => {
         }
     }, [selectedSite, selectedDate, viewMode, summaryDateFrom, summaryDateTo]);
 
+    // Merges a staff/supervisor member's active temporary_assignments sites into a base
+    // site list (their home site for staff, their managed sites for a supervisor) — the
+    // /sites endpoint only knows about site_id / supervisor_id, never temp assignments.
+    // For a supervisor, /sites is already filtered to just their managed sites, so an
+    // assigned site outside that set won't be found there either — build it straight from
+    // the assignment row instead, which already carries SITE_NO/SITE_NAME (full site detail
+    // gets hydrated later via /sites/:id once that site is actually selected).
+    const withAssignedSites = async (baseSites: Site[], allSites: Site[]): Promise<Site[]> => {
+        if (!authUser?.ID) return baseSites;
+        const merged = [...baseSites];
+        try {
+            const assignRes = await api.get(`/assignments?staff_id=${authUser.ID}&active=1`);
+            const seenIds = new Set(merged.map(s => s.ID));
+            (assignRes.data as { SITE_ID: number; SITE_NO: string; SITE_NAME: string }[]).forEach(a => {
+                if (!seenIds.has(a.SITE_ID)) {
+                    const extraSite = allSites.find(s => s.ID === a.SITE_ID)
+                        ?? { ID: a.SITE_ID, SITE_NO: a.SITE_NO, NAME: a.SITE_NAME, SUPERVISOR_ID: null };
+                    merged.push(extraSite);
+                    seenIds.add(a.SITE_ID);
+                }
+            });
+        } catch { /* base sites alone still work if this fails */ }
+        return merged;
+    };
+
     const fetchSites = async () => {
         try {
             const response = await api.get('/sites');
             const allSites: Site[] = response.data;
             if (isStaff && authUser?.ID) {
                 const homeSite = authUser.SITE_ID ? allSites.find(s => s.ID === authUser.SITE_ID) : undefined;
-                let assignedSites: Site[] = homeSite ? [homeSite] : [];
-                try {
-                    const assignRes = await api.get(`/assignments?staff_id=${authUser.ID}&active=1`);
-                    const extraSiteIds = new Set(assignedSites.map(s => s.ID));
-                    (assignRes.data as { SITE_ID: number }[]).forEach(a => {
-                        if (!extraSiteIds.has(a.SITE_ID)) {
-                            const extraSite = allSites.find(s => s.ID === a.SITE_ID);
-                            if (extraSite) { assignedSites.push(extraSite); extraSiteIds.add(extraSite.ID); }
-                        }
-                    });
-                } catch { /* home site alone still works if this fails */ }
+                const assignedSites = await withAssignedSites(homeSite ? [homeSite] : [], allSites);
                 setSites(assignedSites);
                 if (assignedSites[0]) setSelectedSite(assignedSites[0].SITE_NO);
             } else if (role === 'supervisor') {
-                // Server already filters /sites by supervisor_id — allSites is this supervisor's sites
-                setSites(allSites);
-                if (allSites.length > 0) setSelectedSite(allSites[0].SITE_NO);
+                // Server already filters /sites by supervisor_id (sites they manage) —
+                // also merge in any additional sites they've been temp/permanently assigned to.
+                const assignedSites = await withAssignedSites(allSites, allSites);
+                setSites(assignedSites);
+                if (assignedSites.length > 0) setSelectedSite(assignedSites[0].SITE_NO);
             } else {
                 setSites(allSites);
                 if (allSites.length > 0) setSelectedSite(allSites[0].SITE_NO);
