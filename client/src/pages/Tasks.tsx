@@ -54,10 +54,21 @@ const Tasks: React.FC = () => {
         try {
             const response = await api.get('/sites');
             const allSites: Site[] = response.data;
-            if (isStaff && authUser?.SITE_ID) {
-                const staffSite = allSites.find(s => s.ID === authUser.SITE_ID);
-                setSites(staffSite ? [staffSite] : []);
-                if (staffSite) setSelectedSite(staffSite.SITE_NO);
+            if (isStaff && authUser?.ID) {
+                const homeSite = authUser.SITE_ID ? allSites.find(s => s.ID === authUser.SITE_ID) : undefined;
+                let assignedSites: Site[] = homeSite ? [homeSite] : [];
+                try {
+                    const assignRes = await api.get(`/assignments?staff_id=${authUser.ID}&active=1`);
+                    const extraSiteIds = new Set(assignedSites.map(s => s.ID));
+                    (assignRes.data as { SITE_ID: number }[]).forEach(a => {
+                        if (!extraSiteIds.has(a.SITE_ID)) {
+                            const extraSite = allSites.find(s => s.ID === a.SITE_ID);
+                            if (extraSite) { assignedSites.push(extraSite); extraSiteIds.add(extraSite.ID); }
+                        }
+                    });
+                } catch { /* home site alone still works if this fails */ }
+                setSites(assignedSites);
+                if (assignedSites[0]) setSelectedSite(assignedSites[0].SITE_NO);
             } else if (role === 'supervisor') {
                 // Server already filters /sites by supervisor_id — allSites is this supervisor's sites
                 setSites(allSites);
@@ -403,7 +414,7 @@ const Tasks: React.FC = () => {
 
                     {viewMode === 'daily' ? (
                     <div className="flex flex-col sm:flex-row gap-3">
-                            {!isStaff && (
+                            {(!isStaff || sites.length > 1) && (
                                 <div className="flex-1">
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Site</label>
                                     <div className="relative">

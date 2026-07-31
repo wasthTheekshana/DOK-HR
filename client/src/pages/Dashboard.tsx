@@ -107,7 +107,13 @@ const Dashboard: React.FC = () => {
                     date_to:   format(new Date(), 'yyyy-MM-dd'),
                 };
                 if (role === 'staff') {
-                    const tasksRes = await api.get('/tasks', { params: taskParams });
+                    // sitesList is also needed here so the greeting can show the staff
+                    // member's home site name (previously never fetched for this role).
+                    const [tasksRes, sitesRes] = await Promise.all([
+                        api.get('/tasks', { params: taskParams }),
+                        api.get('/sites'),
+                    ]);
+                    setSitesList(sitesRes.data);
                     setStats({ totalSites: 0, totalStaff: 0, totalSupervisors: 0, totalTasks: tasksRes.data.length });
                 } else {
                     const [sitesRes, usersRes, tasksRes] = await Promise.all([
@@ -223,6 +229,14 @@ const Dashboard: React.FC = () => {
     const [staffDateTo,   setStaffDateTo]   = useState(format(new Date(), 'yyyy-MM-dd'));
     const [staffTasks,    setStaffTasks]    = useState<any[]>([]);
     const [staffLoading,  setStaffLoading]  = useState(false);
+    const [staffAssignedSites, setStaffAssignedSites] = useState<{ SITE_ID: number; END_DATE: string | null }[]>([]);
+
+    useEffect(() => {
+        if (role !== 'staff' || !authUser?.ID) return;
+        api.get(`/assignments?staff_id=${authUser.ID}&active=1`)
+            .then(r => setStaffAssignedSites(r.data || []))
+            .catch(() => setStaffAssignedSites([]));
+    }, [role, authUser?.ID]);
 
     useEffect(() => {
         if (role !== 'staff' || !authUser?.ID) return;
@@ -237,6 +251,9 @@ const Dashboard: React.FC = () => {
         const staffSite = sitesList.find(s => s.ID === authUser?.SITE_ID);
         const myCount   = staffTasks.reduce((s, t) => s + (Number(t.COUNT) || 0), 0);
         const myDays    = new Set(staffTasks.map(t => t.TASK_DATE?.slice(0, 10))).size;
+        const extraSiteCards = staffAssignedSites
+            .map(a => ({ site: sitesList.find(s => s.ID === a.SITE_ID), tag: a.END_DATE ? 'Temp' as const : 'Permanent' as const }))
+            .filter((c): c is { site: Site; tag: 'Temp' | 'Permanent' } => !!c.site);
         return (
             <div className="space-y-5">
                 {/* Greeting */}
@@ -251,6 +268,31 @@ const Dashboard: React.FC = () => {
                             : <p className="text-sm text-slate-400 mt-0.5">No site assigned</p>}
                     </div>
                 </div>
+
+                {/* Your Sites — home site plus any additional (permanent/temporary) assignments */}
+                {extraSiteCards.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">Your Sites</p>
+                        <div className="space-y-1.5">
+                            {staffSite && (
+                                <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 bg-slate-50">
+                                    <span className="flex items-center gap-2 text-sm font-medium text-slate-700 truncate">
+                                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {staffSite.NAME}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded-full shrink-0">Home</span>
+                                </div>
+                            )}
+                            {extraSiteCards.map(({ site, tag }) => (
+                                <div key={site.ID} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${tag === 'Permanent' ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'}`}>
+                                    <span className={`flex items-center gap-2 text-sm font-medium truncate ${tag === 'Permanent' ? 'text-blue-800' : 'text-amber-800'}`}>
+                                        <MapPin className={`w-3.5 h-3.5 shrink-0 ${tag === 'Permanent' ? 'text-blue-500' : 'text-amber-500'}`} /> {site.NAME}
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${tag === 'Permanent' ? 'bg-blue-200 text-blue-800' : 'bg-amber-200 text-amber-800'}`}>{tag}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Date range filter */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col sm:flex-row gap-3">
