@@ -37,11 +37,11 @@ export const getAssignments = async (req: Request, res: Response) => {
             params.staff_id = Number(staff_id);
         }
         if (date) {
-            query += ` AND :date::date BETWEEN ta.start_date AND ta.end_date`;
+            query += ` AND :date::date >= ta.start_date AND (ta.end_date IS NULL OR :date::date <= ta.end_date)`;
             params.date = String(date);
         }
         if (active === '1') {
-            query += ` AND CURRENT_DATE BETWEEN ta.start_date AND ta.end_date`;
+            query += ` AND CURRENT_DATE >= ta.start_date AND (ta.end_date IS NULL OR CURRENT_DATE <= ta.end_date)`;
         }
 
         query += ` ORDER BY ta.start_date DESC`;
@@ -56,16 +56,17 @@ export const getAssignments = async (req: Request, res: Response) => {
 
 /**
  * POST /api/assignments
- * Body: { staff_id, site_id, start_date, end_date, note? }
+ * Body: { staff_id, site_id, start_date, end_date?, note? }
+ * end_date omitted/null means an indefinite ("permanent secondary site") assignment.
  */
 export const createAssignment = async (req: Request, res: Response) => {
     const { staff_id, site_id, start_date, end_date, note } = req.body;
     const createdBy = (req as any).user?.id;
 
-    if (!staff_id || !site_id || !start_date || !end_date) {
-        return res.status(400).json({ message: 'staff_id, site_id, start_date, end_date are required' });
+    if (!staff_id || !site_id || !start_date) {
+        return res.status(400).json({ message: 'staff_id, site_id, start_date are required' });
     }
-    if (new Date(end_date) < new Date(start_date)) {
+    if (end_date && new Date(end_date) < new Date(start_date)) {
         return res.status(400).json({ message: 'end_date must be >= start_date' });
     }
 
@@ -80,13 +81,14 @@ export const createAssignment = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Staff is already permanently assigned to this site' });
         }
 
-        // Prevent overlapping assignments to the same secondary site
+        // Prevent overlapping assignments to the same secondary site. A NULL end_date
+        // (either on the new request or an existing row) is treated as open-ended.
         const overlapRes = await execute<any>(
             `SELECT id FROM temporary_assignments
              WHERE staff_id = :staff_id AND site_id = :site_id
-               AND start_date <= :end_date
-               AND end_date   >= :start_date`,
-            { staff_id: Number(staff_id), site_id: Number(site_id), start_date: String(start_date), end_date: String(end_date) }
+               AND start_date <= COALESCE(:end_date::date, '9999-12-31'::date)
+               AND COALESCE(end_date, '9999-12-31'::date) >= :start_date`,
+            { staff_id: Number(staff_id), site_id: Number(site_id), start_date: String(start_date), end_date: end_date ? String(end_date) : null }
         );
         if (overlapRes.rows && overlapRes.rows.length > 0) {
             return res.status(409).json({ message: 'An overlapping assignment to this site already exists for this staff member' });
@@ -99,7 +101,7 @@ export const createAssignment = async (req: Request, res: Response) => {
                 staff_id: Number(staff_id),
                 site_id: Number(site_id),
                 start_date: String(start_date),
-                end_date: String(end_date),
+                end_date: end_date ? String(end_date) : null,
                 note: note || null,
                 created_by: createdBy || null
             }
@@ -132,7 +134,7 @@ export const updateAssignment = async (req: Request, res: Response) => {
         const newStart = start_date || row.START_DATE;
         const newEnd   = end_date   || row.END_DATE;
 
-        if (new Date(newEnd) < new Date(newStart)) {
+        if (newEnd && new Date(newEnd) < new Date(newStart)) {
             return res.status(400).json({ message: 'end_date must be >= start_date' });
         }
 

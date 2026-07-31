@@ -69,7 +69,7 @@ export const getUsers = async (req: Request, res: Response) => {
                  FROM temporary_assignments ta
                  JOIN users u ON ta.staff_id = u.id
                  WHERE ta.site_id = :site_id
-                   AND :date_val::date BETWEEN ta.start_date AND ta.end_date
+                   AND :date_val::date >= ta.start_date AND (ta.end_date IS NULL OR :date_val::date <= ta.end_date)
                    AND u.status = 'active'`,
                 { site_id: Number(site), date_val: String(date) }
             );
@@ -149,9 +149,10 @@ export const createUser = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        await execute(
+        const result = await execute<any>(
             `INSERT INTO users (epf_number, name, password, role, site_id, basic_salary, ot_percentage, fix_salary)
-       VALUES (:epf_number, :name, :password, :role, :site_id, :basic_salary, :ot_percentage, :fix_salary)`,
+       VALUES (:epf_number, :name, :password, :role, :site_id, :basic_salary, :ot_percentage, :fix_salary)
+       RETURNING id`,
             {
                 epf_number,
                 name,
@@ -163,7 +164,7 @@ export const createUser = async (req: Request, res: Response) => {
                 fix_salary: req.body.fix_salary || 0
             }
         );
-        res.status(201).json({ message: 'User created' });
+        res.status(201).json({ message: 'User created', id: result.rows[0].ID });
     } catch (err: any) {
         if ((err as any)?.code === '23505') {
             return res.status(400).json({ message: 'User with this EPF number already exists' });

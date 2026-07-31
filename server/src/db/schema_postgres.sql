@@ -162,7 +162,7 @@ CREATE TABLE temporary_assignments (
   staff_id   INTEGER NOT NULL,
   site_id    INTEGER NOT NULL,
   start_date DATE NOT NULL,
-  end_date   DATE NOT NULL,
+  end_date   DATE,
   note       VARCHAR(255),
   created_by INTEGER NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

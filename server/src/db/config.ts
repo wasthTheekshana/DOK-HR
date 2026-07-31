@@ -121,6 +121,12 @@ export async function initializeDb() {
         await client.query(`
             DROP TABLE IF EXISTS project_milestones
         `);
+        // Lets a temporary_assignments row represent an indefinite ("permanent secondary
+        // site") assignment via end_date IS NULL, alongside the existing dated rows —
+        // existing rows keep their real end_date and behavior is unchanged.
+        await client.query(`
+            ALTER TABLE temporary_assignments ALTER COLUMN end_date DROP NOT NULL
+        `);
         client.release();
         console.log('Database pool created');
     } catch (err) {

@@ -12,9 +12,21 @@ interface TempAssignment {
     SITE_NO: string;
     SITE_NAME: string;
     START_DATE: string;
-    END_DATE: string;
+    END_DATE: string | null; // null = indefinite ("permanent secondary site"), not date-bound
     NOTE: string | null;
 }
+
+// Not-yet-saved assignments collected while creating a brand new staff member —
+// there's no staff_id to attach them to until the user is actually created.
+interface PendingAssignment {
+    key: string;
+    site_id: number;
+    start_date: string;
+    end_date: string | null;
+    note: string;
+}
+
+const ASSIGNMENT_MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
 
 const Users: React.FC = () => {
     const { role: currentUserRole } = useAuth();
@@ -47,16 +59,21 @@ const Users: React.FC = () => {
     const [panelTempSites, setPanelTempSites] = useState<TempAssignment[]>([]);
     const [panelTempLoading, setPanelTempLoading] = useState(false);
 
-    // Temporary assignments (shown inside edit modal for admin)
-    const [assignments, setAssignments]       = useState<TempAssignment[]>([]);
+    // Temporary assignments (shown inside the add/edit modal)
+    const [assignments, setAssignments]             = useState<TempAssignment[]>([]);
+    const [pendingAssignments, setPendingAssignments] = useState<PendingAssignment[]>([]);
     const [assignSiteId, setAssignSiteId]     = useState<string>('');
     const [assignStart, setAssignStart]       = useState<string>('');
     const [assignEnd, setAssignEnd]           = useState<string>('');
+    const [assignPermanent, setAssignPermanent] = useState(false);
     const [assignNote, setAssignNote]         = useState<string>('');
     const [assignSaving, setAssignSaving]     = useState(false);
 
+    // Count of each staff member's currently-active temporary assignments, for the "+N" table badge
+    const [activeAssignmentCounts, setActiveAssignmentCounts] = useState<Record<number, number>>({});
+
     useEffect(() => {
-        const t = setTimeout(() => { fetchUsers(); fetchSites(); }, 300);
+        const t = setTimeout(() => { fetchUsers(); fetchSites(); fetchActiveAssignmentCounts(); }, 300);
         return () => clearTimeout(t);
     }, [roleFilter, searchQuery]);
 
@@ -84,6 +101,15 @@ const Users: React.FC = () => {
         } catch { setAssignments([]); }
     };
 
+    const fetchActiveAssignmentCounts = async () => {
+        try {
+            const r = await api.get('/assignments?active=1');
+            const counts: Record<number, number> = {};
+            (r.data as TempAssignment[]).forEach(a => { counts[a.STAFF_ID] = (counts[a.STAFF_ID] || 0) + 1; });
+            setActiveAssignmentCounts(counts);
+        } catch { setActiveAssignmentCounts({}); }
+    };
+
     const fetchPanelTempSites = async (userId: number) => {
         setPanelTempSites([]);
         setPanelTempLoading(true);
@@ -94,24 +120,41 @@ const Users: React.FC = () => {
         finally { setPanelTempLoading(false); }
     };
 
+    const canManageAssignments = ASSIGNMENT_MANAGER_ROLES.includes(currentUserRole ?? '');
+
     const handleOpenModal = (user?: User) => {
         if (user) {
             setEditingUser(user); setEpfNumber(user.EPF_NUMBER); setName(user.NAME);
             setRole(user.ROLE); setStatus(user.INACTIVATION_REQUESTED ? 'inactive' : (user.STATUS || 'active')); setSiteId(user.SITE_ID || '');
             setBasicSalary(user.BASIC_SALARY || ''); setOtPercentage(user.OT_PERCENTAGE || ''); setFixSalary(user.FIX_SALARY || ''); setPassword('');
-            if (currentUserRole === 'admin') fetchAssignments(user.ID);
+            if (canManageAssignments) fetchAssignments(user.ID);
         } else {
             setEditingUser(null); setEpfNumber(''); setName(''); setRole('staff');
             setStatus('active'); setSiteId(''); setBasicSalary(''); setOtPercentage(''); setFixSalary(''); setPassword('');
             setAssignments([]);
         }
-        setAssignSiteId(''); setAssignStart(''); setAssignEnd(''); setAssignNote('');
+        setPendingAssignments([]);
+        setAssignSiteId(''); setAssignStart(''); setAssignEnd(''); setAssignPermanent(false); setAssignNote('');
         setIsModalOpen(true);
     };
 
+    // Editing an existing user posts the assignment immediately; creating a new one has no
+    // staff_id yet, so it's queued in pendingAssignments and created after the user is saved.
     const handleCreateAssignment = async () => {
-        if (!editingUser || !assignSiteId || !assignStart || !assignEnd) {
-            alert('Select a site and both dates'); return;
+        if (!assignSiteId || !assignStart || (!assignPermanent && !assignEnd)) {
+            alert('Select a site, a start date, and either an end date or "Permanent"'); return;
+        }
+        const endDate = assignPermanent ? null : assignEnd;
+        if (!editingUser) {
+            setPendingAssignments(prev => [...prev, {
+                key: `${Date.now()}-${Math.random()}`,
+                site_id: Number(assignSiteId),
+                start_date: assignStart,
+                end_date: endDate,
+                note: assignNote,
+            }]);
+            setAssignSiteId(''); setAssignStart(''); setAssignEnd(''); setAssignPermanent(false); setAssignNote('');
+            return;
         }
         setAssignSaving(true);
         try {
@@ -119,11 +162,12 @@ const Users: React.FC = () => {
                 staff_id: editingUser.ID,
                 site_id: Number(assignSiteId),
                 start_date: assignStart,
-                end_date: assignEnd,
+                end_date: endDate,
                 note: assignNote || undefined
             });
-            setAssignSiteId(''); setAssignStart(''); setAssignEnd(''); setAssignNote('');
+            setAssignSiteId(''); setAssignStart(''); setAssignEnd(''); setAssignPermanent(false); setAssignNote('');
             fetchAssignments(editingUser.ID);
+            fetchActiveAssignmentCounts();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to create assignment'); }
         finally { setAssignSaving(false); }
     };
@@ -133,7 +177,12 @@ const Users: React.FC = () => {
         try {
             await api.delete(`/assignments/${id}`);
             if (editingUser) fetchAssignments(editingUser.ID);
+            fetchActiveAssignmentCounts();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
+    };
+
+    const removePendingAssignment = (key: string) => {
+        setPendingAssignments(prev => prev.filter(p => p.key !== key));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -148,13 +197,26 @@ const Users: React.FC = () => {
                 payload.ot_percentage = otPercentage ? Number(otPercentage) : 0;
                 payload.fix_salary = fixSalary ? Number(fixSalary) : 0;
             }
-            if (editingUser) await api.patch(`/users/${editingUser.ID}`, payload);
-            else {
+            if (editingUser) {
+                await api.patch(`/users/${editingUser.ID}`, payload);
+            } else {
                 if (currentUserRole === 'supervisor') { alert('Supervisors cannot create users.'); return; }
                 if (!password) { alert('Password required'); return; }
-                await api.post('/users', payload);
+                const created = await api.post('/users', payload);
+                const newStaffId = created.data?.id;
+                if (newStaffId && pendingAssignments.length > 0) {
+                    const results = await Promise.allSettled(pendingAssignments.map(pa => api.post('/assignments', {
+                        staff_id: newStaffId,
+                        site_id: pa.site_id,
+                        start_date: pa.start_date,
+                        end_date: pa.end_date,
+                        note: pa.note || undefined,
+                    })));
+                    const failed = results.filter(r => r.status === 'rejected').length;
+                    if (failed > 0) alert(`Member created, but ${failed} of ${pendingAssignments.length} site assignment(s) failed to save.`);
+                }
             }
-            setIsModalOpen(false); fetchUsers();
+            setIsModalOpen(false); fetchUsers(); fetchActiveAssignmentCounts();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed to save user'); }
         finally { setSaving(false); }
     };
@@ -283,6 +345,12 @@ const Users: React.FC = () => {
                                             <div className="flex items-center gap-1.5">
                                                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                                                 <span className="text-sm text-slate-500">{userSite ? userSite.SITE_NO : '—'}</span>
+                                                {!!activeAssignmentCounts[user.ID] && (
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full shrink-0"
+                                                        title={`${activeAssignmentCounts[user.ID]} additional active site assignment${activeAssignmentCounts[user.ID] > 1 ? 's' : ''}`}>
+                                                        +{activeAssignmentCounts[user.ID]}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         {['admin', 'system_admin'].includes(currentUserRole ?? '') && (
@@ -508,28 +576,31 @@ const Users: React.FC = () => {
                                     </button>
                                 )}
 
-                                {/* Temporary Assignments — admin only, editing existing user */}
-                                {currentUserRole === 'admin' && editingUser && (
+                                {/* Multiple site assignments — available for both creating a new member and editing an existing one */}
+                                {canManageAssignments && (
                                     <div className="border-t-2 border-slate-100 pt-4 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <ArrowRightLeft className="w-4 h-4 text-amber-600" />
-                                            <span className="text-sm font-bold text-slate-700">Temporary Assignments</span>
+                                            <span className="text-sm font-bold text-slate-700">Additional Sites</span>
                                             <span className="text-xs text-slate-400">(counts only — no salary at secondary site)</span>
                                         </div>
 
-                                        {/* Existing assignments list */}
-                                        {assignments.length > 0 && (
+                                        {/* Existing assignments (editing) */}
+                                        {editingUser && assignments.length > 0 && (
                                             <div className="space-y-1.5">
                                                 {assignments.map(a => {
                                                     const now = localDateStr();
-                                                    const isActive = a.START_DATE <= now && now <= a.END_DATE;
+                                                    const isPermanent = !a.END_DATE;
+                                                    const isActive = a.START_DATE <= now && (isPermanent || now <= a.END_DATE!);
                                                     return (
-                                                        <div key={a.ID} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isActive ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+                                                        <div key={a.ID} className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isActive ? (isPermanent ? 'border-blue-300 bg-blue-50' : 'border-amber-300 bg-amber-50') : 'border-slate-200 bg-slate-50'}`}>
                                                             <div className="flex items-center gap-2 min-w-0">
-                                                                <MapPin className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
+                                                                <MapPin className={`w-3.5 h-3.5 shrink-0 ${isActive ? (isPermanent ? 'text-blue-600' : 'text-amber-600') : 'text-slate-400'}`} />
                                                                 <span className="text-xs font-semibold text-slate-700 truncate">{a.SITE_NO} — {a.SITE_NAME}</span>
-                                                                <span className="text-xs text-slate-400 shrink-0">{a.START_DATE} → {a.END_DATE}</span>
-                                                                {isActive && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded-full shrink-0">Active</span>}
+                                                                <span className="text-xs text-slate-400 shrink-0">{isPermanent ? `${a.START_DATE} →` : `${a.START_DATE} → ${a.END_DATE}`}</span>
+                                                                {isPermanent
+                                                                    ? <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded-full shrink-0">Permanent</span>
+                                                                    : isActive && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded-full shrink-0">Active</span>}
                                                             </div>
                                                             <button type="button" onClick={() => handleDeleteAssignment(a.ID)}
                                                                 className="p-1 text-red-400 hover:text-red-600 shrink-0">
@@ -541,13 +612,37 @@ const Users: React.FC = () => {
                                             </div>
                                         )}
 
+                                        {/* Pending assignments (creating a new member — saved once the member is created) */}
+                                        {!editingUser && pendingAssignments.length > 0 && (
+                                            <div className="space-y-1.5">
+                                                {pendingAssignments.map(pa => {
+                                                    const site = sites.find(s => s.ID === pa.site_id);
+                                                    return (
+                                                        <div key={pa.key} className="flex items-center justify-between px-3 py-2 rounded-xl border border-slate-200 bg-slate-50">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                                                <span className="text-xs font-semibold text-slate-700 truncate">{site ? `${site.SITE_NO} — ${site.NAME}` : `Site #${pa.site_id}`}</span>
+                                                                <span className="text-xs text-slate-400 shrink-0">{pa.end_date ? `${pa.start_date} → ${pa.end_date}` : `${pa.start_date} →`}</span>
+                                                                {!pa.end_date && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded-full shrink-0">Permanent</span>}
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded-full shrink-0">Pending</span>
+                                                            </div>
+                                                            <button type="button" onClick={() => removePendingAssignment(pa.key)}
+                                                                className="p-1 text-red-400 hover:text-red-600 shrink-0">
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
                                         {/* New assignment form */}
                                         <div className="bg-slate-50 rounded-xl p-3 space-y-2.5 border border-slate-200">
-                                            <p className="text-xs font-semibold text-slate-500">Add New Assignment</p>
+                                            <p className="text-xs font-semibold text-slate-500">Add {editingUser ? 'New' : 'a'} Site</p>
                                             <select value={assignSiteId} onChange={e => setAssignSiteId(e.target.value)}
                                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500">
                                                 <option value="">Select secondary site</option>
-                                                {sites.filter(s => s.ID !== editingUser.SITE_ID).map(s =>
+                                                {sites.filter(s => s.ID !== Number(siteId)).map(s =>
                                                     <option key={s.ID} value={s.ID}>{s.SITE_NO} — {s.NAME}</option>
                                                 )}
                                             </select>
@@ -559,17 +654,22 @@ const Users: React.FC = () => {
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs text-slate-500 mb-1">End Date</label>
-                                                    <input type="date" value={assignEnd} onChange={e => setAssignEnd(e.target.value)}
-                                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" />
+                                                    <input type="date" value={assignEnd} onChange={e => setAssignEnd(e.target.value)} disabled={assignPermanent}
+                                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-400" />
                                                 </div>
                                             </div>
+                                            <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                                <input type="checkbox" checked={assignPermanent}
+                                                    onChange={e => { setAssignPermanent(e.target.checked); if (e.target.checked) setAssignEnd(''); }} />
+                                                Permanent (no end date)
+                                            </label>
                                             <input type="text" placeholder="Note (optional)" value={assignNote} onChange={e => setAssignNote(e.target.value)}
                                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" />
                                             <button type="button" onClick={handleCreateAssignment} disabled={assignSaving}
                                                 className="w-full flex items-center justify-center gap-2 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-lg text-sm transition-colors disabled:opacity-60">
                                                 {assignSaving
                                                     ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    : <><Calendar className="w-3.5 h-3.5" /> Assign</>
+                                                    : <><Calendar className="w-3.5 h-3.5" /> {editingUser ? 'Assign' : 'Add'}</>
                                                 }
                                             </button>
                                         </div>
@@ -600,7 +700,7 @@ const Users: React.FC = () => {
                 const supervisorSites = viewingUser.ROLE === 'supervisor'
                     ? sites.filter(s => s.SUPERVISOR_ID === viewingUser.ID)
                     : [];
-                const siteCards: { site: Site; tag: 'Home' | 'Manages' | 'Temp' }[] = [];
+                const siteCards: { site: Site; tag: 'Home' | 'Manages' | 'Permanent' | 'Temp' }[] = [];
                 if (viewingUser.ROLE === 'supervisor') {
                     supervisorSites.forEach(s => siteCards.push({ site: s, tag: 'Manages' }));
                 } else if (permanentSite) {
@@ -608,7 +708,7 @@ const Users: React.FC = () => {
                 }
                 panelTempSites.forEach(ta => {
                     const site = sites.find(s => s.ID === ta.SITE_ID);
-                    if (site) siteCards.push({ site, tag: 'Temp' });
+                    if (site) siteCards.push({ site, tag: ta.END_DATE ? 'Temp' : 'Permanent' });
                 });
                 const headerGradient = viewingUser.ROLE === 'admin' || viewingUser.ROLE === 'system_admin'
                     ? 'from-red-50 via-red-50/60 to-white'
@@ -694,8 +794,8 @@ const Users: React.FC = () => {
                                     ) : (
                                         <div className="space-y-2">
                                             {siteCards.map(({ site, tag }, i) => {
-                                                const accent = tag === 'Home' ? 'border-l-slate-400' : tag === 'Manages' ? 'border-l-violet-500' : 'border-l-amber-400';
-                                                const pill = tag === 'Home' ? 'bg-slate-100 text-slate-600' : tag === 'Manages' ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700';
+                                                const accent = tag === 'Home' ? 'border-l-slate-400' : tag === 'Manages' ? 'border-l-violet-500' : tag === 'Permanent' ? 'border-l-blue-400' : 'border-l-amber-400';
+                                                const pill = tag === 'Home' ? 'bg-slate-100 text-slate-600' : tag === 'Manages' ? 'bg-violet-100 text-violet-700' : tag === 'Permanent' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
                                                 return (
                                                     <div key={i} className={`flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 border-l-4 ${accent} shadow-sm`}>
                                                         <div className="flex items-center gap-3 min-w-0">
