@@ -3,7 +3,7 @@ import api from '../services/api';
 import * as XLSX from 'xlsx';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import {
-    DollarSign, FileDown, Search, X, Loader2,
+    DollarSign, FileDown, Search, X, Loader2, Trophy, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import {
     ResponsiveContainer,
@@ -18,9 +18,16 @@ const OT_LABEL: Record<string, string> = {
     time_based: 'Time', target_based: 'Target', staff_outsource: 'Outsource',
 };
 
+const monthToDate = (monthStr: string) => {
+    const [y, mo] = monthStr.split('-').map(Number);
+    return new Date(y, mo - 1, 1);
+};
+
 type DetailTab = 'top_revenue' | 'top_profit' | 'loss' | 'all';
 type TrendMode  = 'monthly' | 'quarterly';
-type DatePreset = 'this_month' | 'last_month' | 'custom';
+type DatePreset = 'this_month' | 'last_month' | 'custom' | 'compare';
+type SortField  = 'site_no' | 'invoice_count' | 'total_revenue' | 'cost_variant' | 'salary_ot' | 'total_cost' | 'net_profit' | 'profit_margin';
+type SortDir    = 'asc' | 'desc';
 
 const InvoiceAnalysis: React.FC = () => {
     const [ia, setIa]             = useState<any>(null);
@@ -29,9 +36,47 @@ const InvoiceAnalysis: React.FC = () => {
     const [trendMode, setTrendMode] = useState<TrendMode>('monthly');
     const [tab, setTab]           = useState<DetailTab>('all');
     const [search, setSearch]     = useState('');
+    const [sortField, setSortField] = useState<SortField>('total_revenue');
+    const [sortDir, setSortDir]     = useState<SortDir>('desc');
+
+    const handleSort = (field: SortField) => {
+        if (field === sortField) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDir(field === 'site_no' ? 'asc' : 'desc');
+        }
+    };
     const [datePreset, setDatePreset] = useState<DatePreset>('this_month');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo,   setCustomTo]   = useState('');
+
+    const [compareMonths, setCompareMonths] = useState<string[]>(
+        () => [0, 1, 2].map(i => format(subMonths(new Date(), i), 'yyyy-MM'))
+    );
+    const [compareData, setCompareData] = useState<(any | null)[]>([null, null, null]);
+    const [compareLoading, setCompareLoading] = useState<boolean[]>([false, false, false]);
+    const [compareError, setCompareError] = useState<boolean[]>([false, false, false]);
+
+    const fetchCompareMonth = (idx: number, monthStr: string) => {
+        const monthDate = monthToDate(monthStr);
+        const df = format(startOfMonth(monthDate), 'yyyy-MM-dd');
+        const dt = format(endOfMonth(monthDate),   'yyyy-MM-dd');
+        setCompareLoading(prev => prev.map((v, i) => i === idx ? true : v));
+        setCompareError(prev => prev.map((v, i) => i === idx ? false : v));
+        api.get('/analytics/invoice-analysis', { params: { date_from: df, date_to: dt } })
+            .then(r => setCompareData(prev => prev.map((v, i) => i === idx ? r.data : v)))
+            .catch(e => {
+                console.error('invoice-analysis compare error', e);
+                setCompareError(prev => prev.map((v, i) => i === idx ? true : v));
+            })
+            .finally(() => setCompareLoading(prev => prev.map((v, i) => i === idx ? false : v)));
+    };
+
+    const handleCompareMonthChange = (idx: number, value: string) => {
+        setCompareMonths(prev => prev.map((v, i) => i === idx ? value : v));
+        fetchCompareMonth(idx, value);
+    };
 
     const fetchData = (df: string, dt: string) => {
         if (ia === null) setLoading(true);
@@ -58,6 +103,10 @@ const InvoiceAnalysis: React.FC = () => {
         } else if (preset === 'last_month') {
             const last = subMonths(new Date(), 1);
             fetchData(format(startOfMonth(last), 'yyyy-MM-dd'), format(endOfMonth(last), 'yyyy-MM-dd'));
+        } else if (preset === 'compare') {
+            compareMonths.forEach((m, i) => {
+                if (!compareData[i]) fetchCompareMonth(i, m);
+            });
         }
         // 'custom' — waits for the Load button
     };
@@ -72,13 +121,19 @@ const InvoiceAnalysis: React.FC = () => {
         tab === 'loss'        ? (ia?.lossSites    || []) :
         (ia?.sites || []);
 
-    const detailRows = search.trim()
+    const filteredRows = search.trim()
         ? baseRows.filter((r: any) =>
             r.site_no?.toLowerCase().includes(search.toLowerCase()) ||
             r.site_name?.toLowerCase().includes(search.toLowerCase()) ||
             r.service_type?.toLowerCase().includes(search.toLowerCase())
           )
         : baseRows;
+
+    const detailRows = [...filteredRows].sort((a: any, b: any) => {
+        const av = a[sortField], bv = b[sortField];
+        const cmp = typeof av === 'string' ? String(av).localeCompare(String(bv)) : (Number(av) || 0) - (Number(bv) || 0);
+        return sortDir === 'asc' ? cmp : -cmp;
+    });
 
     const downloadExcel = () => {
         const tabLabel = tab === 'top_revenue' ? 'Top Revenue' :
@@ -146,6 +201,7 @@ const InvoiceAnalysis: React.FC = () => {
                             { id: 'this_month' as const, label: 'This Month'   },
                             { id: 'last_month' as const, label: 'Last Month'   },
                             { id: 'custom'     as const, label: 'Custom Range' },
+                            { id: 'compare'    as const, label: 'Compare Months' },
                         ]).map(p => (
                             <button key={p.id} type="button"
                                 onClick={() => handlePresetChange(p.id)}
@@ -190,6 +246,16 @@ const InvoiceAnalysis: React.FC = () => {
                 </div>
             </div>
 
+            {datePreset === 'compare' ? (
+            <MonthlyComparison
+                compareMonths={compareMonths}
+                compareData={compareData}
+                compareLoading={compareLoading}
+                compareError={compareError}
+                onMonthChange={handleCompareMonthChange}
+            />
+            ) : (
+            <>
             {/* KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {[
@@ -366,15 +432,15 @@ const InvoiceAnalysis: React.FC = () => {
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-100">
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">#</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Site</th>
+                                    <SortableHeader label="Site"        field="site_no"       align="left"  sortField={sortField} sortDir={sortDir} onSort={handleSort} />
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden lg:table-cell">Type</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Invoices</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-blue-600 uppercase tracking-wider">Revenue</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wider hidden md:table-cell">Variants</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-violet-600 uppercase tracking-wider hidden md:table-cell">Salary+OT</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-rose-600 uppercase tracking-wider">Total Cost</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Profit/Loss</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Margin</th>
+                                    <SortableHeader label="Invoices"    field="invoice_count" align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+                                    <SortableHeader label="Revenue"     field="total_revenue" align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} colorClass="text-blue-600" />
+                                    <SortableHeader label="Variants"    field="cost_variant"  align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} colorClass="text-amber-600" className="hidden md:table-cell" />
+                                    <SortableHeader label="Salary+OT"   field="salary_ot"     align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} colorClass="text-violet-600" className="hidden md:table-cell" />
+                                    <SortableHeader label="Total Cost"  field="total_cost"    align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} colorClass="text-rose-600" />
+                                    <SortableHeader label="Profit/Loss" field="net_profit"    align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+                                    <SortableHeader label="Margin"      field="profit_margin" align="right" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
@@ -444,6 +510,146 @@ const InvoiceAnalysis: React.FC = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
+        </div>
+    );
+};
+
+const SortableHeader: React.FC<{
+    label: string;
+    field: SortField;
+    align: 'left' | 'right';
+    sortField: SortField;
+    sortDir: SortDir;
+    onSort: (field: SortField) => void;
+    colorClass?: string;
+    className?: string;
+}> = ({ label, field, align, sortField, sortDir, onSort, colorClass, className }) => {
+    const active = sortField === field;
+    const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+    return (
+        <th className={`px-4 py-3 text-${align} text-xs font-semibold uppercase tracking-wider ${colorClass || 'text-slate-500'} ${className || ''}`}>
+            <button
+                type="button"
+                onClick={() => onSort(field)}
+                className={`inline-flex items-center gap-1 hover:text-slate-800 transition-colors ${align === 'right' ? 'flex-row-reverse' : ''} ${active ? 'font-bold' : ''}`}
+            >
+                {label}
+                <Icon className={`w-3 h-3 ${active ? 'opacity-100' : 'opacity-30'}`} />
+            </button>
+        </th>
+    );
+};
+
+const CMP_KPI: { key: string; label: string; fmt: (sm: any) => string; sub: (sm: any) => string; bg: string; tc: string; sc: string }[] = [
+    { key: 'total_revenue',     label: 'Revenue',       fmt: sm => fmtRs(sm.total_revenue || 0),   sub: sm => `${sm.total_invoices || 0} invoices`,             bg: 'bg-blue-50',    tc: 'text-blue-900',    sc: 'text-blue-500' },
+    { key: 'total_cost',        label: 'Total Cost',    fmt: sm => fmtRs(sm.total_cost || 0),       sub: () => 'Salary+OT+Variants+Exp',                          bg: 'bg-rose-50',    tc: 'text-rose-900',    sc: 'text-rose-500' },
+    { key: 'net_profit',        label: 'Net Profit/Loss', fmt: sm => `${(sm.net_profit||0) >= 0 ? '+' : '−'}${fmtRs(sm.net_profit||0)}`, sub: sm => `${sm.profit_margin || 0}% margin`,
+      bg: 'bg-emerald-50', tc: 'text-emerald-900', sc: 'text-emerald-500' },
+    { key: 'avg_invoice_value', label: 'Avg Invoice',   fmt: sm => fmtRs(sm.avg_invoice_value || 0), sub: sm => `${sm.site_count || 0} billing sites`,           bg: 'bg-violet-50',  tc: 'text-violet-900',  sc: 'text-violet-500' },
+];
+
+const MonthlyComparison: React.FC<{
+    compareMonths: string[];
+    compareData: (any | null)[];
+    compareLoading: boolean[];
+    compareError: boolean[];
+    onMonthChange: (idx: number, value: string) => void;
+}> = ({ compareMonths, compareData, compareLoading, compareError, onMonthChange }) => {
+    const bestIdx = compareData.every(d => d)
+        ? compareData.reduce((best, cur, i, arr) =>
+            (cur.summary?.net_profit ?? -Infinity) > (arr[best].summary?.net_profit ?? -Infinity) ? i : best, 0)
+        : -1;
+
+    const chartData = compareMonths.map((m, i) => ({
+        month:         format(monthToDate(m), 'MMM yyyy'),
+        total_revenue: compareData[i]?.summary?.total_revenue || 0,
+        total_cost:    compareData[i]?.summary?.total_cost    || 0,
+        net_profit:    compareData[i]?.summary?.net_profit    || 0,
+    }));
+    const hasChartData = compareData.some(d => d?.summary?.total_invoices > 0);
+
+    return (
+        <div className="space-y-4">
+        <div className="card p-5">
+            <h3 className="text-sm font-bold text-slate-700 mb-4">Revenue · Cost · Profit Comparison</h3>
+            {!hasChartData ? (
+                <div className="flex items-center justify-center h-48 text-slate-400 text-sm">No invoice data for the selected months</div>
+            ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartData} margin={{ top: 8, right: 20, left: 10, bottom: 8 }} barSize={28}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+                        <Tooltip content={({ active, payload, label }: any) => {
+                            if (!active || !payload?.length) return null;
+                            return (
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3 text-xs">
+                                    <p className="font-bold text-slate-700 mb-1">{label}</p>
+                                    {payload.map((e: any, i: number) => (
+                                        <p key={i} style={{ color: e.fill || e.color }} className="font-semibold">{e.name}: {fmtRs(e.value)}</p>
+                                    ))}
+                                </div>
+                            );
+                        }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="total_revenue" name="Revenue"    fill="#3b82f6" radius={[3,3,0,0]} />
+                        <Bar dataKey="total_cost"    name="Total Cost" fill="#f43f5e" radius={[3,3,0,0]} />
+                        <Bar dataKey="net_profit"    name="Net Profit" fill="#10b981" radius={[3,3,0,0]} />
+                    </BarChart>
+                </ResponsiveContainer>
+            )}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {compareMonths.map((m, i) => {
+                const sm = compareData[i]?.summary;
+                return (
+                    <div key={i} className="card p-5 relative">
+                        {i === bestIdx && (
+                            <span className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                                <Trophy className="w-3 h-3" /> Best
+                            </span>
+                        )}
+                        <label className="form-label">Select Month</label>
+                        <input
+                            type="month"
+                            value={m}
+                            onChange={e => onMonthChange(i, e.target.value)}
+                            className="form-input mb-4"
+                        />
+                        {compareLoading[i] ? (
+                            <div className="space-y-2">
+                                {[...Array(4)].map((_, k) => <div key={k} className="skeleton h-14 rounded-lg" />)}
+                            </div>
+                        ) : compareError[i] ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-red-400">
+                                <p className="text-xs">Failed to load this month's data.</p>
+                                <button type="button" onClick={() => onMonthChange(i, m)}
+                                    className="mt-2 text-xs font-semibold text-green-700 hover:underline">
+                                    Retry
+                                </button>
+                            </div>
+                        ) : !sm || sm.total_invoices === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                                <DollarSign className="w-8 h-8 mb-2 opacity-30" />
+                                <p className="text-xs">No invoices for this month</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {CMP_KPI.map(k => (
+                                    <div key={k.key} className={`${k.bg} rounded-xl p-3`}>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">{k.label}</p>
+                                        <p className={`text-base font-black ${k.tc} leading-tight`}>{k.fmt(sm)}</p>
+                                        <p className={`text-[10px] ${k.sc} mt-1`}>{k.sub(sm)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
         </div>
     );
 };
