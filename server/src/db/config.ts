@@ -33,7 +33,7 @@ export async function initializeDb() {
         `);
         await client.query(`
             ALTER TABLE users ADD CONSTRAINT users_role_check
-            CHECK (role IN ('admin','supervisor','staff','system_admin','project_manager'))
+            CHECK (role IN ('admin','supervisor','staff','system_admin','project_manager','hr'))
         `);
         await client.query(`
             ALTER TABLE sites ADD COLUMN IF NOT EXISTS planned_start_date DATE
