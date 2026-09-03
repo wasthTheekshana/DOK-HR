@@ -61,6 +61,22 @@ describe('hr role permission wiring', () => {
         expect(res.status).toBe(200);
     });
 
+    test('cannot see salary fields when viewing team', async () => {
+        asHr();
+        mockExecute.mockResolvedValueOnce({ rows: [{
+            ID: 1, EPF_NUMBER: 'E1', NAME: 'Jane Staff', ROLE: 'staff', STATUS: 'active',
+            SITE_ID: 1, INACTIVATION_REQUESTED: 0,
+            BASIC_SALARY: 50000, OT_PERCENTAGE: 10, FIX_SALARY: 5000,
+            CREATED_AT: '2026-01-01',
+        }] });
+        const res = await request(app).get('/api/users');
+        expect(res.status).toBe(200);
+        expect(res.body[0]).not.toHaveProperty('BASIC_SALARY');
+        expect(res.body[0]).not.toHaveProperty('OT_PERCENTAGE');
+        expect(res.body[0]).not.toHaveProperty('FIX_SALARY');
+        expect(res.body[0].NAME).toBe('Jane Staff');
+    });
+
     test('can view attendance', async () => {
         asHr();
         const res = await request(app).get('/api/attendance');

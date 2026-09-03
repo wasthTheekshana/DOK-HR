@@ -85,6 +85,10 @@ export const getUsers = async (req: Request, res: Response) => {
             }
         }
 
+        if (!['admin', 'system_admin'].includes(userRole)) {
+            users = users.map(({ BASIC_SALARY, OT_PERCENTAGE, FIX_SALARY, ...rest }: any) => rest);
+        }
+
         res.json(users);
     } catch (err) {
         console.error('getUsers error:', err);

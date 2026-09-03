@@ -268,15 +268,21 @@ const Users: React.FC = () => {
         { key: 'hr', label: 'HR' },
     ];
 
+    // Neutralizes CSV/Excel formula injection: a name or site starting with
+    // =, +, -, @, or a tab/CR could otherwise be interpreted as a formula
+    // by Excel/Sheets when the exported file is opened.
+    const sanitizeExcelCell = (value: string) =>
+        /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+
     const downloadTeamExcel = () => {
         const rows = users.map(user => {
             const userSite = sites.find(s => s.ID === user.SITE_ID);
             const status = user.INACTIVATION_REQUESTED ? 'Flagged' : user.STATUS === 'active' ? 'Active' : 'Inactive';
             return {
-                'EPF Number': user.EPF_NUMBER,
-                'Name': user.NAME,
+                'EPF Number': sanitizeExcelCell(user.EPF_NUMBER),
+                'Name': sanitizeExcelCell(user.NAME),
                 'Role': user.ROLE,
-                'Site': userSite ? `${userSite.SITE_NO} - ${userSite.NAME}` : '',
+                'Site': sanitizeExcelCell(userSite ? `${userSite.SITE_NO} - ${userSite.NAME}` : ''),
                 'Status': status,
             };
         });
