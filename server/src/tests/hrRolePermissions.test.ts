@@ -50,6 +50,7 @@ describe('hr role permission wiring', () => {
 
     test('can view a single site', async () => {
         asHr();
+        mockExecute.mockResolvedValueOnce({ rows: [{ ID: 1, SITE_NO: 'S1', NAME: 'Site 1' }] });
         const res = await request(app).get('/api/sites/1');
         expect(res.status).toBe(200);
     });
