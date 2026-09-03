@@ -18,3 +18,20 @@ describe('role enum includes project_manager', () => {
         expect(result.success).toBe(true);
     });
 });
+
+describe('role enum includes hr', () => {
+    test('createUserSchema accepts hr', () => {
+        const result = createUserSchema.safeParse({
+            epf_number: 'EPF002',
+            name: 'Jane HR',
+            password: 'secret123',
+            role: 'hr',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    test('updateUserSchema accepts hr', () => {
+        const result = updateUserSchema.safeParse({ role: 'hr' });
+        expect(result.success).toBe(true);
+    });
+});

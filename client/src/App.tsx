@@ -73,7 +73,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DashboardHome />} />
-            <Route path="tasks" element={<Tasks />} />
+            <Route path="tasks" element={<RoleProtectedRoute allowedRoles={['admin', 'supervisor', 'staff']}><Tasks /></RoleProtectedRoute>} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="sites" element={<RoleProtectedRoute allowedRoles={SITE_TEAM_VIEW_ROLES}><Sites /></RoleProtectedRoute>} />
             <Route path="users" element={<RoleProtectedRoute allowedRoles={SITE_TEAM_VIEW_ROLES}><Users /></RoleProtectedRoute>} />
