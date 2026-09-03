@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { User, Site } from '../types';
 import { localDateStr } from '../lib/utils';
-import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff, ArrowRightLeft, Calendar } from 'lucide-react';
+import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff, ArrowRightLeft, Calendar, Contact } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface TempAssignment {
@@ -254,6 +254,7 @@ const Users: React.FC = () => {
         switch (r) {
             case 'admin': return { bg: 'bg-red-100', text: 'text-red-700', icon: Shield };
             case 'supervisor': return { bg: 'bg-violet-100', text: 'text-violet-700', icon: UsersIcon };
+            case 'hr': return { bg: 'bg-pink-100', text: 'text-pink-700', icon: Contact };
             default: return { bg: 'bg-blue-100', text: 'text-blue-700', icon: UserCircle };
         }
     };
@@ -263,6 +264,7 @@ const Users: React.FC = () => {
         { key: 'admin', label: 'Admins' },
         { key: 'supervisor', label: 'Supervisors' },
         { key: 'staff', label: 'Staff' },
+        { key: 'hr', label: 'HR' },
     ];
 
     if (loading) return (
@@ -508,8 +510,8 @@ const Users: React.FC = () => {
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-2">Role *</label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {['staff', 'supervisor', 'admin'].map(r => {
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                        {['staff', 'supervisor', 'admin', 'hr'].map(r => {
                                             const c = getRoleConfig(r);
                                             const Icon = c.icon;
                                             return (
