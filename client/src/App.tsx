@@ -47,6 +47,12 @@ const RoleProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles: st
   return <>{children}</>;
 };
 
+const DashboardHome: React.FC = () => {
+  const { role } = useAuth();
+  if (role === 'hr') return <Navigate to="/sites" replace />;
+  return <Dashboard />;
+};
+
 const ADMIN_ROLES = ['admin', 'system_admin'];
 const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
 // Routes project_manager should reach in addition to the sets above — kept separate
@@ -54,6 +60,9 @@ const MANAGER_ROLES = ['admin', 'system_admin', 'supervisor'];
 // which share ADMIN_ROLES/MANAGER_ROLES today but are explicitly system_admin/admin-only per spec.
 const PM_MANAGER_ROLES = [...MANAGER_ROLES, 'project_manager'];
 const PM_ADMIN_ROLES = [...ADMIN_ROLES, 'project_manager'];
+// hr is read-only on Sites and Team only — kept separate from PM_MANAGER_ROLES so it can't
+// leak into payroll/reports/analytics, which share that array today.
+const SITE_TEAM_VIEW_ROLES = [...PM_MANAGER_ROLES, 'hr'];
 
 function App() {
   return (
@@ -63,11 +72,11 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<DashboardHome />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="attendance" element={<AttendancePage />} />
-            <Route path="sites" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Sites /></RoleProtectedRoute>} />
-            <Route path="users" element={<RoleProtectedRoute allowedRoles={PM_MANAGER_ROLES}><Users /></RoleProtectedRoute>} />
+            <Route path="sites" element={<RoleProtectedRoute allowedRoles={SITE_TEAM_VIEW_ROLES}><Sites /></RoleProtectedRoute>} />
+            <Route path="users" element={<RoleProtectedRoute allowedRoles={SITE_TEAM_VIEW_ROLES}><Users /></RoleProtectedRoute>} />
             <Route path="payroll" element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES}><Payroll /></RoleProtectedRoute>} />
             <Route path="reports" element={<RoleProtectedRoute allowedRoles={['admin', 'project_manager']}><Reports /></RoleProtectedRoute>} />
             <Route path="analytics" element={<RoleProtectedRoute allowedRoles={MANAGER_ROLES}><Analytics /></RoleProtectedRoute>} />

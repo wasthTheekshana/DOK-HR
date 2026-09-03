@@ -2,7 +2,7 @@ export interface User {
     ID: number;
     EPF_NUMBER: string;
     NAME: string;
-    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin' | 'project_manager';
+    ROLE: 'admin' | 'supervisor' | 'staff' | 'system_admin' | 'project_manager' | 'hr';
     STATUS: 'active' | 'inactive';
     SITE_ID: number | null;
     INACTIVATION_REQUESTED?: number; // 0 or 1
