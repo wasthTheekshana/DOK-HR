@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import type { User, Site } from '../types';
 import { localDateStr } from '../lib/utils';
-import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff, ArrowRightLeft, Calendar, Contact } from 'lucide-react';
+import { Plus, Edit, UserCircle, MapPin, Shield, Users as UsersIcon, X, CheckCircle, XCircle, AlertTriangle, Search, Trash2, KeyRound, Eye, EyeOff, ArrowRightLeft, Calendar, Contact, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 
 interface TempAssignment {
@@ -267,6 +268,25 @@ const Users: React.FC = () => {
         { key: 'hr', label: 'HR' },
     ];
 
+    const downloadTeamExcel = () => {
+        const rows = users.map(user => {
+            const userSite = sites.find(s => s.ID === user.SITE_ID);
+            const status = user.INACTIVATION_REQUESTED ? 'Flagged' : user.STATUS === 'active' ? 'Active' : 'Inactive';
+            return {
+                'EPF Number': user.EPF_NUMBER,
+                'Name': user.NAME,
+                'Role': user.ROLE,
+                'Site': userSite ? `${userSite.SITE_NO} - ${userSite.NAME}` : '',
+                'Status': status,
+            };
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 10 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Team Members');
+        XLSX.writeFile(wb, `team_members_${localDateStr()}.xlsx`);
+    };
+
     if (loading) return (
         <div className="space-y-4">
             {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-white rounded-2xl animate-pulse"></div>)}
@@ -280,11 +300,16 @@ const Users: React.FC = () => {
                     <h1 className="text-xl font-bold text-slate-900 tracking-tight">Team Management</h1>
                     <p className="text-slate-500 text-sm mt-0.5">{users.length} member{users.length !== 1 ? 's' : ''}</p>
                 </div>
-                {currentUserRole === 'admin' && (
-                    <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
-                        <Plus className="w-4 h-4" /> Add Member
+                <div className="flex items-center gap-2">
+                    <button onClick={downloadTeamExcel} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
+                        <Download className="w-4 h-4" /> Download Excel
                     </button>
-                )}
+                    {currentUserRole === 'admin' && (
+                        <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm">
+                            <Plus className="w-4 h-4" /> Add Member
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
