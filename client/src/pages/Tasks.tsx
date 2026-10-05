@@ -204,6 +204,7 @@ const Tasks: React.FC = () => {
                 if (isAllSites) row['Site'] = t.SITE_NO || t.SITE_NAME || '';
                 row['Date'] = t.TASK_DATE ? t.TASK_DATE.slice(0, 10) : selectedDate;
                 row['Staff'] = t.STAFF_NAME || '';
+                row['EPF Number'] = t.EPF_NUMBER || '';
                 row['Task'] = t.TASK_DESCRIPTION || '';
                 row['OT Type'] = t.OT_TYPE || '';
                 row['Count'] = t.COUNT ?? 0;

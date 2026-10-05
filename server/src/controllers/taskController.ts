@@ -62,7 +62,7 @@ export const getTasks = async (req: Request, res: Response) => {
 
     try {
         let query = `
-      SELECT t.*, u.name as staff_name, s.site_no, s.name as site_name
+      SELECT t.*, u.name as staff_name, u.epf_number as epf_number, s.site_no, s.name as site_name
       FROM tasks t
       JOIN sites s ON t.site_id = s.id
       JOIN users u ON t.staff_id = u.id

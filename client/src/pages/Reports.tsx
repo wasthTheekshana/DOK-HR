@@ -316,7 +316,7 @@ const Reports: React.FC = () => {
         const gA = customOtData.reduce((s, r) => s + (Number(r.total_adjusted_extra_hours) || 0), 0);
         const gP = customOtData.reduce((s, r) => s + (Number(r.total_payment) || 0), 0);
         const ws = XLSX.utils.json_to_sheet([
-            ...customOtData.map(r => ({ 'Site': r.site_no, 'EPF Number': r.epf_number || '-', 'Staff Name': r.staff_name, 'Type': r.calculation_type || 'Custom %', 'Extra Hours': (Number(r.total_extra_hours) || 0).toFixed(2), 'Custom OT %': r.calculation_type === '90% Fixed' ? 'N/A' : customOtPercentage + '%', 'Adjusted Hours': (Number(r.total_adjusted_extra_hours) || 0).toFixed(2), 'Payment': (Number(r.total_payment) || 0).toFixed(2) })),
+            ...customOtData.map(r => ({ 'Site': r.site_no, 'EPF Number': r.epf_number || '-', 'Staff Name': r.staff_name, 'Type': r.calculation_type || 'Custom %', 'Extra Hours': (Number(r.total_extra_hours) || 0).toFixed(2), 'Custom OT %': r.calculation_type === 'Fix Count' ? 'N/A' : customOtPercentage + '%', 'Adjusted Hours': (Number(r.total_adjusted_extra_hours) || 0).toFixed(2), 'Payment': (Number(r.total_payment) || 0).toFixed(2) })),
             { 'Site': '', 'EPF Number': '', 'Staff Name': 'GRAND TOTAL', 'Type': '', 'Extra Hours': gH.toFixed(2), 'Custom OT %': '', 'Adjusted Hours': gA.toFixed(2), 'Payment': gP.toFixed(2) }
         ]);
         const wb = XLSX.utils.book_new();
@@ -849,13 +849,13 @@ const Reports: React.FC = () => {
                                                 <td className="px-5 py-3.5 text-sm text-slate-500 whitespace-nowrap font-mono">{row.epf_number || '-'}</td>
                                                 <td className="px-5 py-3.5 text-sm font-semibold text-slate-900 whitespace-nowrap">{row.staff_name}</td>
                                                 <td className="px-5 py-3.5 text-center whitespace-nowrap">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${row.calculation_type === '90% Fixed' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${row.calculation_type === 'Fix Count' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
                                                         {row.calculation_type || 'Custom %'}
                                                     </span>
                                                 </td>
                                                 <td className="px-5 py-3.5 text-sm text-right font-mono text-slate-900 whitespace-nowrap">{(Number(row.total_extra_hours) || 0).toFixed(2)}</td>
                                                 <td className="px-5 py-3.5 text-sm text-right font-semibold text-blue-600 whitespace-nowrap">
-                                                    {row.calculation_type === '90% Fixed' ? 'N/A' : `${customOtPercentage}%`}
+                                                    {row.calculation_type === 'Fix Count' ? 'N/A' : `${customOtPercentage}%`}
                                                 </td>
                                                 <td className="px-5 py-3.5 text-sm text-right font-bold text-violet-600 whitespace-nowrap">{(Number(row.total_adjusted_extra_hours) || 0).toFixed(2)}</td>
                                                 <td className="px-5 py-3.5 text-sm text-right font-bold text-emerald-600 whitespace-nowrap">{(Number(row.total_payment) || 0).toFixed(2)}</td>
@@ -947,7 +947,7 @@ const Reports: React.FC = () => {
                                                                         <td className="px-5 py-2.5 text-xs font-mono text-slate-400">{r.EPF_NUMBER || '-'}</td>
                                                                         <td className="px-5 py-2.5 text-sm font-medium text-slate-700">{r.STAFF_NAME}</td>
                                                                         <td className="px-5 py-2.5 text-center">
-                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${r.CALCULATION_TYPE === '90% Fixed' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${r.CALCULATION_TYPE === 'Fix Count' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
                                                                                 {r.CALCULATION_TYPE || 'Custom %'}
                                                                             </span>
                                                                         </td>

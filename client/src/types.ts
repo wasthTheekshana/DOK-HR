@@ -57,6 +57,7 @@ export interface Task {
     IN_TIME: string | null;
     OUT_TIME: string | null;
     STAFF_NAME?: string;
+    EPF_NUMBER?: string;
     SITE_NAME?: string;
     SITE_NO?: string;
 }
