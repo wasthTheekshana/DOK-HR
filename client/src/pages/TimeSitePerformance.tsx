@@ -101,7 +101,7 @@ const TimeSitePerformance: React.FC = () => {
     // Load time-based sites only
     useEffect(() => {
         api.get('/sites').then(res => {
-            const timeSites = (res.data || []).filter((s: Site) => s.OT_TYPE === 'time_based' || s.OT_TYPE === 'staff_outsource' || !s.OT_TYPE);
+            const timeSites = (res.data || []).filter((s: Site) => s.STATUS === 'active' && (s.OT_TYPE === 'time_based' || s.OT_TYPE === 'staff_outsource' || !s.OT_TYPE));
             setSites(timeSites);
             if (timeSites.length > 0) setSelectedSiteId(String(timeSites[0].ID));
         }).catch(console.error);

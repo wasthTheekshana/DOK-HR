@@ -77,7 +77,7 @@ const SitePerformance: React.FC = () => {
     // Load target-based sites
     useEffect(() => {
         api.get('/sites').then(res => {
-            const targetSites = (res.data || []).filter((s: Site) => s.OT_TYPE === 'target_based');
+            const targetSites = (res.data || []).filter((s: Site) => s.STATUS === 'active' && s.OT_TYPE === 'target_based');
             setSites(targetSites);
             if (targetSites.length > 0) setSelectedSiteId(String(targetSites[0].ID));
         }).catch(console.error);

@@ -412,6 +412,7 @@ export const getSiteAnalytics = async (req: Request, res: Response) => {
                     COALESCE(SUM(CASE WHEN u.role = 'staff' AND u.status = 'active' THEN u.basic_salary END), 0) as total_salary
                  FROM sites s
                  LEFT JOIN users u ON u.site_id = s.id
+                 WHERE s.status = 'active'
                  GROUP BY s.id, s.name, s.site_no, s.daily_target
                  ORDER BY s.site_no`,
                 []
