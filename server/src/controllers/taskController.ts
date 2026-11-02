@@ -363,7 +363,7 @@ export const getTaskSummary = async (req: Request, res: Response) => {
                    t.task_description, t.count, t.in_time, t.out_time,
                    t.invoice_price, t.pay_unit_price,
                    TO_CHAR(t.task_date, 'YYYY-MM-DD') as task_date,
-                   u.name as staff_name, s.site_no, s.name as site_name, s.ot_type as site_ot_type
+                   u.name as staff_name, u.epf_number as epf_number, s.site_no, s.name as site_name, s.ot_type as site_ot_type
             FROM tasks t
             JOIN sites s ON t.site_id = s.id
             JOIN users u ON t.staff_id = u.id

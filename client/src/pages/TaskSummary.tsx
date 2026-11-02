@@ -76,6 +76,7 @@ const TaskSummary: React.FC = () => {
                 detailRows.push({
                     Site: site.site_name, 'Site No': site.site_no,
                     'OT Type': site.site_ot_type === 'time_based' ? 'Time' : 'Target',
+                    'EPF No': task.EPF_NUMBER || '',
                     Employee: task.STAFF_NAME,
                     Date: task.TASK_DATE ? String(task.TASK_DATE).slice(0, 10) : '',
                     Task: task.TASK_DESCRIPTION, Count: task.COUNT ?? '',
